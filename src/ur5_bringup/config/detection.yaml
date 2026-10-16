@@ -1,0 +1,32 @@
+# Parameters for the run-time detection stack (cup_detection.launch.py).
+
+handeye_publisher:
+  ros__parameters:
+    calibration_file: ~/.ros/handeye/ur5_handeye.yaml
+    # Root frame of the camera driver's own TF tree; '' to attach the optical frame directly.
+    camera_base_frame: camera_link
+
+yolo_detector:
+  ros__parameters:
+    image_topic: /camera/camera/color/image_raw
+    model: yolo11n.pt         # or yolov8n.pt, or a fine-tuned best.pt
+    classes: cup              # comma-separated COCO names; '' = all
+    confidence: 0.5
+    iou: 0.5
+    device: auto              # auto | cpu | cuda:0
+    image_size: 640
+
+object_localization:
+  ros__parameters:
+    detections_topic: /yolo_detector/detections
+    depth_topic: /camera/camera/aligned_depth_to_color/image_raw
+    camera_info_topic: /camera/camera/color/camera_info
+    target_frame: base_link
+    target_class: cup
+    sync_slop_s: 0.1
+    roi_fraction: 0.4
+    depth_percentile: 50.0
+    min_depth_m: 0.15
+    max_depth_m: 3.0
+    surface_to_centre_m: 0.0  # e.g. 0.04 to report the cup's centre instead of its front face
+    max_result_age_s: 1.0

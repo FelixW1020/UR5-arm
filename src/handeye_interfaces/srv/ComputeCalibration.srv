@@ -1,0 +1,10 @@
+# Solve AX=XB over all recorded samples.
+bool save   # also write the result (and raw samples) to disk
+---
+bool success
+string message
+# eye_in_hand: tool0 -> camera optical frame; eye_to_hand: base_link -> camera optical frame
+geometry_msgs/TransformStamped transform
+# Spread of the chained board pose across samples (lower is better).
+float64 translation_residual_m
+float64 rotation_residual_deg

@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>ur5_bringup</name>
+  <version>0.1.0</version>
+  <description>Launch files and configuration that wire the UR5 calibration and detection stacks together.</description>
+  <maintainer email="fw124@duke.edu">Felix Wang</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>ur_robot_driver</exec_depend>
+  <exec_depend>realsense2_camera</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+  <exec_depend>calib_target_detector</exec_depend>
+  <exec_depend>handeye_calibration</exec_depend>
+  <exec_depend>handeye_publisher</exec_depend>
+  <exec_depend>handeye_motion</exec_depend>
+  <exec_depend>yolo_detector</exec_depend>
+  <exec_depend>object_localization</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

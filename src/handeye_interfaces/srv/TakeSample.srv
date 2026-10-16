@@ -1,0 +1,5 @@
+# Record one (robot pose, calibration board pose) pair. The arm must be stationary.
+---
+bool success
+string message
+uint32 num_samples

@@ -1,0 +1,8 @@
+# Ask where an object is, in the robot base frame.
+string class_name    # e.g. "cup"; empty matches any class
+float64 timeout_s    # how long to wait for a fresh detection
+---
+bool found
+string message
+geometry_msgs/PoseStamped pose
+float32 score

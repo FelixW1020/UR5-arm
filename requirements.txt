@@ -1,0 +1,7 @@
+# pip extras not covered by rosdep. Install with:
+#   pip install -r requirements.txt
+ultralytics>=8.3
+# OpenCV 5.0's Python bindings dropped cv2.calibrateHandEye; keep 4.x.
+opencv-python<5
+# cv_bridge on ROS 2 Humble is built against NumPy 1.x.
+numpy<2
