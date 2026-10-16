@@ -21,6 +21,7 @@ setup(
         'console_scripts': [
             'calibration_node = handeye_calibration.calibration_node:main',
             'solve_offline = handeye_calibration.solve_offline:main',
+            'calibrate_cli = handeye_calibration.calibrate_cli:main',
         ],
     },
 )

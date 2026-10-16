@@ -77,27 +77,32 @@ UR side: install the **External Control** URCap on the pendant, and set its host
 2. **Mount the board:**
    - `eye_to_hand` (camera fixed in the cell, the default): attach the board rigidly to the tool flange.
    - `eye_in_hand` (camera on the wrist): fix the board to the table.
-3. **Launch:**
+3. **Start the session** on the PC wired to the robot and camera:
    ```bash
-   ros2 launch ur5_bringup calibration.launch.py robot_ip:=<UR_IP> mount:=eye_to_hand
+   scripts/handeye_calibrate.sh <UR_IP>                 # eye_to_hand (default)
+   scripts/handeye_calibrate.sh <UR_IP> eye_in_hand     # camera on the wrist
    ```
-   Check the *Board detection* image in RViz. It shows the board axes and a reprojection error in green.
-4. **Collect 15–20 samples.** Freedrive the arm to a pose, let it stop, then run:
-   ```bash
-   ros2 service call /handeye_calibration/take_sample handeye_interfaces/srv/TakeSample
-   ```
-   **Vary the wrist orientation a lot**, at least ±30° about two or more different axes. Translation-only motion can't be solved. The service reports the rotation spread so far, and rejects samples taken while the arm is moving or the board is out of view.
-5. **Solve and save:**
-   ```bash
-   ros2 service call /handeye_calibration/compute handeye_interfaces/srv/ComputeCalibration "{save: true}"
-   ```
-   This writes `~/.ros/handeye/ur5_handeye.yaml` plus the raw samples. A good result has a residual of a few mm and well under 1°.
+   It checks the robot answers (ping, dashboard port 29999), that a RealSense is plugged in, and which board size is configured. Then it starts `calibration.launch.py` in the background (log: `~/.ros/handeye/session.log`) and opens an interactive console. Check the *Board detection* image in RViz: it shows the board axes and a reprojection error in green. Extra launch arguments pass straight through, e.g. `use_motion:=true rviz:=false`.
+4. **Collect 15–20 samples.** Freedrive the arm to a pose, let it stop, and press **Enter** in the console. **Vary the wrist orientation a lot**, at least ±30° about two or more different axes. Translation-only motion can't be solved. Each sample reports the rotation spread so far; samples taken while the arm is moving or the board is out of view are rejected. Freedrive sampling only needs the driver's joint states, so the External Control program doesn't have to be running.
+
+   | Key | Action |
+   |---|---|
+   | Enter | take a sample |
+   | `p` | take a sample and record the joint pose for replay (`use_motion:=true`) |
+   | `u` / `r` | undo last sample / reset all |
+   | `c` | compute and show the result |
+   | `s` | compute and **save** |
+   | `?` | board / robot TF status |
+   | `q` | quit (stops the whole session) |
+5. **Solve and save** with `s`. This writes `~/.ros/handeye/ur5_handeye.yaml` plus the raw samples. A good result has a residual of a few mm and well under 1°.
+
+   Prefer raw ROS? `ros2 launch ur5_bringup calibration.launch.py robot_ip:=<UR_IP> mount:=eye_to_hand`, then `ros2 run handeye_calibration calibrate_cli` (or `scripts/handeye_calibrate.sh --console-only`), or call `/handeye_calibration/take_sample` and `/handeye_calibration/compute` directly.
 6. **(Optional) Compare solver methods offline** on the same samples:
    ```bash
    ros2 run handeye_calibration solve_offline ~/.ros/handeye/ur5_handeye_samples.yaml
    ```
 
-**Repeatable re-calibration:** launch with `use_motion:=true`. During the first run, also call `/handeye_motion/record_pose` at each pose. Later, `/handeye_motion/run` replays those poses (in joint space, at ≤ 0.3 rad/s) and takes a sample at each one. Then call `compute`. Keep the e-stop within reach.
+**Repeatable re-calibration:** launch with `use_motion:=true`. During the first run, press `p` instead of Enter at each pose (or call `/handeye_motion/record_pose`). Later, `/handeye_motion/run` replays those poses (in joint space, at ≤ 0.3 rad/s) and takes a sample at each one. Then call `compute`. Keep the e-stop within reach.
 
 ## Step 2: Find the cup
 
