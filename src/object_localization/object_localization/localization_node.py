@@ -45,8 +45,8 @@ class LocalizationNode(Node):
     def __init__(self):
         super().__init__('object_localization')
         self.declare_parameter('detections_topic', '/yolo_detector/detections')
-        self.declare_parameter('depth_topic', '/camera/camera/aligned_depth_to_color/image_raw')
-        self.declare_parameter('camera_info_topic', '/camera/camera/color/camera_info')
+        self.declare_parameter('depth_topic', '/camera/table_cam/aligned_depth_to_color/image_raw')
+        self.declare_parameter('camera_info_topic', '/camera/table_cam/color/camera_info')
         self.declare_parameter('target_frame', 'base_link')
         self.declare_parameter('target_class', 'cup')
         self.declare_parameter('sync_slop_s', 0.1)

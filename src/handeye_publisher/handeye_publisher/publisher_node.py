@@ -26,8 +26,8 @@ class HandEyePublisher(Node):
 
     def __init__(self):
         super().__init__('handeye_publisher')
-        self.declare_parameter('calibration_file', '~/.ros/handeye/ur5_handeye.yaml')
-        self.declare_parameter('camera_base_frame', 'camera_link')
+        self.declare_parameter('calibration_file', '~/.ros/handeye/table_cam.yaml')
+        self.declare_parameter('camera_base_frame', 'table_cam_link')
 
         path = self.get_parameter('calibration_file').value
         try:
@@ -35,7 +35,7 @@ class HandEyePublisher(Node):
         except FileNotFoundError:
             raise SystemExit(
                 f'No calibration file at {path}. Run the hand-eye calibration first '
-                '(scripts/handeye_calibrate.sh <ROBOT_IP>) or set calibration_file:=...')
+                '(scripts/handeye_calibrate.sh <ROBOT_IP> <camera>) or set calibration_file:=...')
         self._camera_base = self.get_parameter('camera_base_frame').value
         self.get_logger().info(
             f'Loaded {path}: {data["mount"]}, {self._parent} -> {self._optical}, '

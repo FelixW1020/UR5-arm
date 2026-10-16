@@ -20,7 +20,7 @@ class YoloNode(Node):
 
     def __init__(self):
         super().__init__('yolo_detector')
-        self.declare_parameter('image_topic', '/camera/camera/color/image_raw')
+        self.declare_parameter('image_topic', '/camera/table_cam/color/image_raw')
         # Any Ultralytics model: yolov8n.pt, yolo11n.pt, or your own fine-tuned best.pt.
         self.declare_parameter('model', 'yolo11n.pt')
         self.declare_parameter('classes', 'cup')       # comma-separated COCO names; '' = all

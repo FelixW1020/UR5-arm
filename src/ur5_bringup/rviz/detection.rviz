@@ -25,6 +25,11 @@ Visualization Manager:
       Enabled: true
       Topic:
         Value: /object_localization/markers
+    - Class: rviz_default_plugins/MarkerArray
+      Name: ArUco tags
+      Enabled: true
+      Topic:
+        Value: /aruco_tag_mapper/markers
     - Class: rviz_default_plugins/Pose
       Name: Target pose
       Enabled: true

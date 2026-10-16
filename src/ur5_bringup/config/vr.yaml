@@ -1,0 +1,31 @@
+# Parameters for the VR registration stack (vr.launch.py).
+
+aruco_tag_mapper:
+  ros__parameters:
+    cameras: [wrist_cam, table_cam]
+    base_frame: base_link
+    dictionary: DICT_4X4_50      # different family from the ChArUco board on purpose
+    marker_length: 0.10          # m, MEASURE the printed black square
+    tag_ids: '0,1,2,3,4,5'       # '' = any id
+    max_reprojection_error_px: 1.5
+    max_distance_m: 2.0
+    min_observations: 20
+    output_file: ~/.ros/handeye/tag_map.yaml
+
+vr_registration:
+  ros__parameters:
+    base_frame: base_link
+    vr_frame: vr_world
+    effector_frame: tool0
+    tag_map_file: ~/.ros/handeye/tag_map.yaml
+    mode: yaw_only               # yaw_only (robot base level) | full
+    output_file: ~/.ros/handeye/vr_registration.yaml
+    load_on_start: true
+    warn_rms_m: 0.03
+
+vr_pose_relay:
+  ros__parameters:
+    base_frame: base_link
+    vr_frame: vr_world
+    topics: [/object_localization/target_pose]
+    robot_pose_rate_hz: 2.0

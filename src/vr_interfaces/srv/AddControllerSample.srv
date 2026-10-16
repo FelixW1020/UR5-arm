@@ -1,0 +1,7 @@
+# Controller clamped to the tool flange: record its VR pose together with the
+# current robot flange pose (from TF). The arm must be stationary.
+geometry_msgs/Pose controller_pose   # in vr_world (FLU)
+---
+bool success
+string message
+uint32 num_samples

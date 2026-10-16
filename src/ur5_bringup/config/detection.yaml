@@ -1,14 +1,8 @@
 # Parameters for the run-time detection stack (cup_detection.launch.py).
-
-handeye_publisher:
-  ros__parameters:
-    calibration_file: ~/.ros/handeye/ur5_handeye.yaml
-    # Root frame of the camera driver's own TF tree; '' to attach the optical frame directly.
-    camera_base_frame: camera_link
+# Camera topics are set by the launch file from detection_camera:=wrist_cam|table_cam.
 
 yolo_detector:
   ros__parameters:
-    image_topic: /camera/camera/color/image_raw
     model: yolo11n.pt         # or yolov8n.pt, or a fine-tuned best.pt
     classes: cup              # comma-separated COCO names; '' = all
     confidence: 0.5
@@ -19,8 +13,6 @@ yolo_detector:
 object_localization:
   ros__parameters:
     detections_topic: /yolo_detector/detections
-    depth_topic: /camera/camera/aligned_depth_to_color/image_raw
-    camera_info_topic: /camera/camera/color/camera_info
     target_frame: base_link
     target_class: cup
     sync_slop_s: 0.1

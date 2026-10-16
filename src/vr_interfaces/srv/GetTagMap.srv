@@ -1,0 +1,8 @@
+# Tag poses for display in VR (to eyeball the registration) or for guiding the user.
+# Returned in vr_world once registered, otherwise in base_link.
+---
+bool success
+string message
+string frame_id
+int32[] ids
+geometry_msgs/Pose[] poses

@@ -46,7 +46,7 @@ class MotionNode(Node):
     def __init__(self):
         super().__init__('handeye_motion')
         self.declare_parameter('joint_names', UR_JOINTS)
-        self.declare_parameter('poses_file', '~/.ros/handeye/calib_poses.yaml')
+        self.declare_parameter('poses_file', '~/.ros/handeye/table_cam_poses.yaml')
         self.declare_parameter(
             'trajectory_action',
             '/scaled_joint_trajectory_controller/follow_joint_trajectory')

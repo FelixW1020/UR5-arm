@@ -42,7 +42,7 @@ class CalibrationNode(Node):
         # Reject a sample if the flange moved more than this between the image stamp and now.
         self.declare_parameter('max_motion_m', 0.002)
         self.declare_parameter('max_motion_deg', 0.3)
-        self.declare_parameter('output_file', '~/.ros/handeye/ur5_handeye.yaml')
+        self.declare_parameter('output_file', '~/.ros/handeye/table_cam.yaml')
 
         g = lambda n: self.get_parameter(n).value  # noqa: E731
         self._mount = g('mount')

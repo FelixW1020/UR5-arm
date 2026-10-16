@@ -1,0 +1,11 @@
+# Solve base_link <-> vr_world from tags whose base_link positions are in the tag map.
+vr_interfaces/TagObservation[] observations
+bool save
+---
+bool success
+string message
+geometry_msgs/TransformStamped base_to_vr   # parent base_link, child vr_world
+float64 rms_error_m
+float64 max_error_m
+int32[] used_ids
+float64[] errors_m                          # per used id, same order

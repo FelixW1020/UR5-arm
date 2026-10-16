@@ -1,6 +1,6 @@
 """Re-solve a saved sample set, e.g. to compare methods without touching the robot.
 
-  ros2 run handeye_calibration solve_offline ~/.ros/handeye/ur5_handeye_samples.yaml
+  ros2 run handeye_calibration solve_offline ~/.ros/handeye/table_cam_samples.yaml
 """
 import argparse
 

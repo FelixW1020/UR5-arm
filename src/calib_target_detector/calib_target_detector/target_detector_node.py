@@ -24,8 +24,8 @@ class TargetDetectorNode(Node):
 
     def __init__(self):
         super().__init__('target_detector')
-        self.declare_parameter('image_topic', '/camera/camera/color/image_raw')
-        self.declare_parameter('camera_info_topic', '/camera/camera/color/camera_info')
+        self.declare_parameter('image_topic', '/camera/table_cam/color/image_raw')
+        self.declare_parameter('camera_info_topic', '/camera/table_cam/color/camera_info')
         self.declare_parameter('squares_x', 7)
         self.declare_parameter('squares_y', 5)
         self.declare_parameter('square_length', 0.035)

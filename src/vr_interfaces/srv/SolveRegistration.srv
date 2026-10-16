@@ -1,0 +1,8 @@
+# Solve base_link <-> vr_world from the recorded controller-on-flange samples.
+bool save
+---
+bool success
+string message
+geometry_msgs/TransformStamped base_to_vr
+float64 rms_error_m
+float64 max_error_m

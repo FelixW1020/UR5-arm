@@ -18,6 +18,9 @@
   <exec_depend>handeye_motion</exec_depend>
   <exec_depend>yolo_detector</exec_depend>
   <exec_depend>object_localization</exec_depend>
+  <exec_depend>aruco_tag_mapper</exec_depend>
+  <exec_depend>vr_registration</exec_depend>
+  <!-- ros_tcp_endpoint (Unity link) is not released as a binary; clone it into src/ (see README). -->
 
   <export>
     <build_type>ament_cmake</build_type>

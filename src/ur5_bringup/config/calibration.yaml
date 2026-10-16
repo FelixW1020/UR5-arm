@@ -1,9 +1,8 @@
 # Parameters for the calibration session (calibration.launch.py).
+# Camera topics, mount, output_file and poses_file are set per camera by the launch file.
 
 target_detector:
   ros__parameters:
-    image_topic: /camera/camera/color/image_raw
-    camera_info_topic: /camera/camera/color/camera_info
     # Must match the printed board. MEASURE the printed squares with calipers;
     # a 1% scale error here becomes a 1% scale error in the camera position.
     squares_x: 7
@@ -18,7 +17,6 @@ target_detector:
 
 handeye_calibration:
   ros__parameters:
-    mount: eye_to_hand              # overridden by the launch argument
     robot_base_frame: base_link
     robot_effector_frame: tool0
     board_pose_topic: /target_detector/board_pose
@@ -26,11 +24,9 @@ handeye_calibration:
     max_board_pose_age_s: 0.5
     max_motion_m: 0.002
     max_motion_deg: 0.3
-    output_file: ~/.ros/handeye/ur5_handeye.yaml
 
 handeye_motion:
   ros__parameters:
-    poses_file: ~/.ros/handeye/calib_poses.yaml
     trajectory_action: /scaled_joint_trajectory_controller/follow_joint_trajectory
     take_sample_service: /handeye_calibration/take_sample
     max_joint_speed: 0.3            # rad/s
