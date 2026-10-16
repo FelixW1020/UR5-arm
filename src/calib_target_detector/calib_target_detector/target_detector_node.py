@@ -11,7 +11,7 @@ import rclpy
 from cv_bridge import CvBridge
 from geometry_msgs.msg import PoseStamped, TransformStamped
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import CameraInfo, Image
 from tf2_ros import TransformBroadcaster
 
@@ -53,7 +53,10 @@ class TargetDetectorNode(Node):
         self._pose_pub = self.create_publisher(PoseStamped, '~/board_pose', 10)
         self._debug_pub = self.create_publisher(Image, '~/debug_image', 1)
         self.create_subscription(CameraInfo, g('camera_info_topic'), self._on_info, 10)
-        self.create_subscription(Image, g('image_topic'), self._on_image, qos_profile_sensor_data)
+        # depth=1 + best effort: always process the newest frame. A backlog would make the
+        # board pose older than handeye_calibration's max_board_pose_age_s.
+        qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
+        self.create_subscription(Image, g('image_topic'), self._on_image, qos)
         self.get_logger().info('Waiting for camera_info and images...')
 
     def _on_info(self, msg: CameraInfo):

@@ -30,7 +30,12 @@ class HandEyePublisher(Node):
         self.declare_parameter('camera_base_frame', 'camera_link')
 
         path = self.get_parameter('calibration_file').value
-        self._parent, self._optical, self._T_parent_optical, data = load_calibration(path)
+        try:
+            self._parent, self._optical, self._T_parent_optical, data = load_calibration(path)
+        except FileNotFoundError:
+            raise SystemExit(
+                f'No calibration file at {path}. Run the hand-eye calibration first '
+                '(scripts/handeye_calibrate.sh <ROBOT_IP>) or set calibration_file:=...')
         self._camera_base = self.get_parameter('camera_base_frame').value
         self.get_logger().info(
             f'Loaded {path}: {data["mount"]}, {self._parent} -> {self._optical}, '
@@ -70,7 +75,12 @@ class HandEyePublisher(Node):
 
 def main():
     rclpy.init()
-    node = HandEyePublisher()
+    try:
+        node = HandEyePublisher()
+    except SystemExit as e:
+        print(f'[handeye_publisher] {e}')
+        rclpy.try_shutdown()
+        return 1
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
