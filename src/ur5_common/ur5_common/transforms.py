@@ -68,6 +68,12 @@ def invert(T):
     return make_transform(R.T, -R.T @ t)
 
 
+# Camera "link" frame (x along the view, y image-left, z image-up: the ROS body convention, and
+# what ROS-TCP-Connector's FLU conversion gives for a Unity camera) -> OpenCV optical frame
+# (x image-right, y image-down, z along the view). Same as the RealSense *_link -> *_optical_frame.
+T_LINK_OPTICAL = make_transform([[0.0, 0.0, 1.0], [-1.0, 0.0, 0.0], [0.0, -1.0, 0.0]], [0, 0, 0])
+
+
 def rotation_angle(R):
     """Angle (rad) of a rotation matrix."""
     c = (np.trace(np.asarray(R)[:3, :3]) - 1.0) / 2.0

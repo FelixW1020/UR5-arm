@@ -16,6 +16,9 @@ using UnityEngine;
 /// </summary>
 public class RobotWorldFrame : MonoBehaviour
 {
+    /// <summary>ROS frame id of this frame (header.frame_id of everything sent from Unity).</summary>
+    public const string RosFrameId = "vr_world";
+
     public static RobotWorldFrame Instance { get; private set; }
 
     void Awake()
@@ -31,8 +34,15 @@ public class RobotWorldFrame : MonoBehaviour
     public QuaternionMsg ToRosRotation(Quaternion worldRotation) =>
         (Quaternion.Inverse(transform.rotation) * worldRotation).To<FLU>();
 
-    public PoseMsg ToRosPose(Transform t) =>
-        new PoseMsg(ToRosPoint(t.position), ToRosRotation(t.rotation));
+    /// <summary>
+    /// The resulting ROS frame has x = the object's Unity forward, y = Unity left, z = Unity up.
+    /// So a camera-like pose (forward = viewing direction, up = image up) becomes the "link"
+    /// convention the ROS side expects: x = viewing direction, y = image-left, z = image-up.
+    /// </summary>
+    public PoseMsg ToRosPose(Vector3 worldPosition, Quaternion worldRotation) =>
+        new PoseMsg(ToRosPoint(worldPosition), ToRosRotation(worldRotation));
+
+    public PoseMsg ToRosPose(Transform t) => ToRosPose(t.position, t.rotation);
 
     public Vector3 FromRosPoint(PointMsg p) => transform.TransformPoint(p.From<FLU>());
 

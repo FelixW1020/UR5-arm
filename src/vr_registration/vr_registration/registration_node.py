@@ -3,7 +3,8 @@
 Two methods, same output (static TF base_link -> vr_world, saved to output_file):
 
   Tags (~/register_tags): the Quest reports where it sees / touches the ArUco tags;
-      their robot-frame positions come from aruco_tag_mapper's tag map.
+      their robot-frame poses come from aruco_tag_mapper's tag map. A sighting also carries
+      the tag's orientation, so a single seen tag is enough; touches need >= 2 (full: 3) tags.
   Controller on flange (~/add_controller_sample, ~/solve_controller): a Touch
       controller is clamped to the tool flange; each sample pairs its VR pose with
       the robot's tool0 pose from TF.
@@ -29,7 +30,7 @@ from tf2_ros import (Buffer, StaticTransformBroadcaster, TransformException,
 from aruco_tag_mapper.tag_map import load_tag_map
 from ur5_common.ros_conversions import (matrix_to_pose, matrix_to_transform, pose_to_matrix,
                                         transform_to_matrix)
-from ur5_common.transforms import invert, rotation_angle
+from ur5_common.transforms import invert, quat_to_matrix, rotation_angle
 from vr_interfaces.srv import AddControllerSample, GetTagMap, RegisterTags, SolveRegistration
 from vr_registration import registration as reg
 from vr_registration.registration_io import load_registration, save_registration
@@ -44,15 +45,19 @@ class RegistrationNode(Node):
         self.declare_parameter('effector_frame', 'tool0')
         self.declare_parameter('tag_map_file', '~/.ros/handeye/tag_map.yaml')
         self.declare_parameter('mode', 'yaw_only')          # yaw_only | full (tag method)
+        self.declare_parameter('tag_rotation_weight', 0.1)  # m^2, one tag's orientation vs position
         self.declare_parameter('output_file', '~/.ros/handeye/vr_registration.yaml')
         self.declare_parameter('load_on_start', True)
         self.declare_parameter('warn_rms_m', 0.03)
+        self.declare_parameter('warn_rotation_deg', 10.0)
         self.declare_parameter('max_motion_m', 0.002)
         self.declare_parameter('max_motion_deg', 0.3)
 
         g = lambda n: self.get_parameter(n).value  # noqa: E731
         if g('mode') not in reg.MODES:
             raise ValueError(f'mode must be one of {reg.MODES}')
+        if not g('tag_rotation_weight') >= 0.0:
+            raise ValueError('tag_rotation_weight must be >= 0 (0 ignores tag orientations)')
         self._base, self._vr, self._effector = g('base_frame'), g('vr_frame'), g('effector_frame')
         self._T_base_vr = None
         self._lock = threading.Lock()
@@ -93,13 +98,13 @@ class RegistrationNode(Node):
             self._T_base_vr = T_base_vr
         return msg
 
-    def _finish(self, r, request_save, response, extra):
+    def _finish(self, r, request_save, response, extra, note=''):
         response.success = True
         response.base_to_vr = self._publish(r.T_base_vr)
         response.rms_error_m = r.rms_error_m
         response.max_error_m = r.max_error_m
         response.message = (f'{r.method}: rms {r.rms_error_m * 1000:.1f} mm, '
-                            f'max {r.max_error_m * 1000:.1f} mm.')
+                            f'max {r.max_error_m * 1000:.1f} mm.{note}')
         if r.rms_error_m > self.get_parameter('warn_rms_m').value:
             response.message += ' WARNING: large error, check tag ids / measurements.'
         if request_save:
@@ -120,21 +125,45 @@ class RegistrationNode(Node):
             response.message = f'Tag map is in {frame}, expected {self._base}.'
             return response
 
-        seen = {}
-        for o in request.observations:      # average repeated observations of the same tag
-            seen.setdefault(o.id, []).append([o.position.x, o.position.y, o.position.z])
+        obs = []
+        for o in request.observations:
+            R = None
+            if o.has_orientation:
+                q = o.orientation
+                if abs(np.linalg.norm([q.x, q.y, q.z, q.w]) - 1.0) > 0.1:
+                    response.message = (f'Tag {o.id}: has_orientation is set but its orientation '
+                                        'is not a unit quaternion.')
+                    return response
+                R = quat_to_matrix(q.x, q.y, q.z, q.w)
+            obs.append((o.id, [o.position.x, o.position.y, o.position.z], R))
+        seen = reg.average_tag_observations(obs)    # repeated observations of the same tag
         used = sorted(i for i in seen if i in tags)
         unknown = sorted(i for i in seen if i not in tags)
+        oriented = [i for i in used if seen[i][1] is not None]
         try:
-            r = reg.fit_points([np.mean(seen[i], axis=0) for i in used],
-                               [tags[i][:3, 3] for i in used],
-                               self.get_parameter('mode').value)
+            r = reg.fit_tags([seen[i][0] for i in used], [tags[i][:3, 3] for i in used],
+                             [seen[i][1] for i in oriented], [tags[i][:3, :3] for i in oriented],
+                             self.get_parameter('mode').value,
+                             self.get_parameter('tag_rotation_weight').value)
         except ValueError as e:
-            response.message = f'Registration failed: {e} (matched tags {used}, unknown {unknown}).'
+            response.message = (f'Registration failed: {e} (matched tags {used}, with orientation '
+                                f'{oriented}, unknown {unknown}).')
             return response
         response.used_ids = used
         response.errors_m = [float(e) for e in r.errors_m]
-        self._finish(r, request.save, response, {'tags': used})
+        rot_err = [float(e) for e in r.rotation_errors_deg]
+        note = ''
+        if len(used) == 1:
+            note += ' Single tag: its position error is 0 by construction; add a 2nd to check.'
+        if rot_err:
+            note += ' Orientation error: ' + ', '.join(
+                f'tag {i} {e:.1f} deg' for i, e in zip(oriented, rot_err)) + '.'
+            if max(rot_err) > self.get_parameter('warn_rotation_deg').value:
+                note += (' WARNING: large orientation error, check tag ids / that the tags '
+                         'have not moved since mapping.')
+        self._finish(r, request.save, response, {
+            'tags': used, 'tags_with_orientation': oriented, 'rotation_errors_deg': rot_err},
+            note)
         if unknown:
             response.message += f' Ignored tags not in the map: {unknown}.'
         return response

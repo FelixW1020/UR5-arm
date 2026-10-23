@@ -1,0 +1,62 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Global Options:
+    Fixed Frame: base_link
+    Frame Rate: 30
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+    - Class: rviz_default_plugins/RobotModel
+      Name: RobotModel
+      Enabled: true
+      Description Topic:
+        Durability Policy: Transient Local
+        Value: /robot_description
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+      Marker Scale: 0.3
+      Show Names: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: ArUco tags (robot cameras)
+      Enabled: true
+      Topic:
+        Value: /aruco_tag_mapper/markers
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Quest tags (vr_tag_detector)
+      Enabled: true
+      Topic:
+        Value: /vr_tag_detector/markers
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Quest headset + controllers
+      Enabled: true
+      Topic:
+        Value: /quest_bridge/markers
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Teleop target
+      Enabled: true
+      Topic:
+        Value: /vr_teleop/markers
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Alignment (controller vs tool motion)
+      Enabled: true
+      Topic:
+        Value: /vr_alignment_monitor/markers
+    - Class: rviz_default_plugins/Image
+      Name: Quest tag detection
+      Enabled: true
+      Topic:
+        Value: /vr_tag_detector/debug_image
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 2.5
+      Focal Point: {X: 0.4, Y: -0.2, Z: 0.3}

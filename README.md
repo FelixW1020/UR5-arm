@@ -1,67 +1,50 @@
-# UR5 Hand-Eye Calibration, YOLO Localization and Quest 3 Registration (ROS 2 Humble)
+# UR5 + Meta Quest 3: Shared Coordinates for Mixed Reality (ROS 2 Humble)
 
-A modular ROS 2 workspace for a UR5 with two Intel RealSense cameras (one on the wrist, one on the table) and a Meta Quest 3. It does four things:
+This workspace connects a **UR5 robot arm**, two **Intel RealSense cameras** and a **Meta Quest 3 headset**, so they all agree on where things are in the room. With that in place you can:
 
-1. **Calibrates both cameras** to the robot (hand-eye calibration):
-   - `wrist_cam`: eye-in-hand.
-   - `table_cam`: eye-to-hand.
-2. **Localizes objects** (a cup by default) with YOLO + depth, as 3D poses in the robot's `base_link` frame.
-3. **Maps fixed ArUco tags** in the workspace with both cameras. This also cross-checks the two calibrations against each other.
-4. **Registers the Quest 3's world to the robot** using those tags (or a controller clamped to the flange). A Unity game can then show the robot and the cup in the right place, in mixed reality.
+- see the robot's camera detections (e.g. a cup) in the headset,
+- use the headset and controllers as inputs to your robot code (in the robot's own coordinates),
+- move the arm by moving a controller, and check that it moves the way your hand does.
 
-Each stage is its own package. Packages talk only through ROS topics, services and TF, so any piece (camera, detector, VR client) can be swapped.
+Everything also runs in **simulation in RViz**: no robot or headset needed. That's the best place to start.
 
-## Architecture
+## The big idea: coordinate frames
+
+Every device measures positions in its own coordinate system (a *frame*). The robot uses `base_link` (origin at the base of the arm). Each camera has its own frame, and the Quest has its own world frame, which we call `vr_world`. A point at (1, 0, 0) in one frame is somewhere else entirely in another.
+
+To combine them, we find the transform (rotation + translation) from each frame to `base_link`, one link at a time:
 
 ```mermaid
 flowchart LR
-  subgraph Drivers
-    UR[ur_robot_driver<br/>TF: base_link→tool0]
-    RS1[realsense wrist_cam]
-    RS2[realsense table_cam]
-  end
-
-  subgraph Calibration["Hand-eye calibration (once per camera)"]
-    TD[calib_target_detector] --> HC[handeye_calibration]
-    HM[handeye_motion] -.-> HC
-  end
-
-  subgraph Runtime
-    HP[handeye_publisher ×2<br/>TF: tool0→wrist_cam_link<br/>base_link→table_cam_link]
-    YO[yolo_detector] --> OL[object_localization]
-    TM[aruco_tag_mapper<br/>tag_map.yaml]
-    VR[vr_registration<br/>TF: base_link→vr_world]
-    PR[vr_pose_relay<br/>/vr/... topics]
-  end
-
-  QUEST[Quest 3 Unity app<br/>unity/RobotRegistration]
-
-  RS1 & RS2 --> TD
-  UR --> HC
-  HC -->|wrist_cam.yaml, table_cam.yaml| HP
-  HP --> OL & TM
-  RS1 & RS2 --> TM --> VR
-  OL -->|target_pose| PR
-  VR --> PR
-  QUEST <-->|ROS-TCP-Endpoint :10000<br/>register_tags / controller samples / poses| VR
-  PR --> QUEST
+  CAM[RealSense cameras] -->|"① hand-eye calibration"| BASE[UR5 base_link]
+  TAG[ArUco tags on the table] -->|"② tag map: cameras find the tags"| BASE
+  QUEST[Quest 3 vr_world] -->|"③ registration: headset looks at a tag"| BASE
 ```
 
-| Package | Role |
+1. **Hand-eye calibration**: where each camera is relative to the robot.
+2. **Tag map**: the calibrated cameras find printed ArUco tags (square barcodes) and save their positions in `base_link`.
+3. **Registration**: the headset sees one of those tags. Since we know where that tag is in both frames, we can solve for `base_link → vr_world`.
+
+After that, ROS's transform library (TF) can convert any pose between the robot, the cameras, the tags and the headset.
+
+## What's in the repo
+
+Each part is its own ROS 2 package, and they only talk through topics, services and TF, so you can swap any piece.
+
+| Package | What it does |
 |---|---|
-| `handeye_interfaces` | `TakeSample`, `ComputeCalibration` and `LocateObject` services |
-| `vr_interfaces` | `TagObservation` message; `RegisterTags`, `AddControllerSample`, `SolveRegistration` and `GetTagMap` services |
-| `ur5_common` | Pure-numpy transform math |
-| `calib_target_detector` | ChArUco board pose (for hand-eye calibration) |
-| `handeye_calibration` | Records samples and solves eye-in-hand or eye-to-hand (OpenCV `calibrateHandEye`) |
-| `handeye_motion` | Optional: records and replays arm poses for repeatable calibration |
-| `handeye_publisher` | Attaches each calibrated camera to the robot TF tree |
-| `yolo_detector` | Ultralytics YOLO → `vision_msgs/Detection2DArray` |
-| `object_localization` | 2D box + depth + TF → 3D pose in `base_link`, plus a `~/locate` service |
-| `aruco_tag_mapper` | Fuses ArUco tag sightings from both cameras into `tag_map.yaml`, in `base_link` |
-| `vr_registration` | Solves `base_link → vr_world` (from tags or a controller on the flange), and relays poses into `vr_world` |
+| `calib_target_detector`, `handeye_calibration`, `handeye_motion`, `handeye_publisher` | ① Calibrate each camera to the robot and publish the result to TF |
+| `yolo_detector`, `object_localization` | Find objects (a cup by default) with YOLO + depth, in `base_link` |
+| `aruco_tag_mapper` | ② Map ArUco tags with both cameras into `tag_map.yaml` |
+| `vr_tag_detector` | ③ Finds the tags in the Quest's camera images |
+| `vr_registration` | ③ Solves `base_link → vr_world` (from tags, tag touches, or a controller clamped to the arm) |
+| `vr_tracking` | Streams the headset and controllers into ROS, in `base_link`. **This is what your own code uses** |
+| `vr_teleop` | Hold the grip button to move the arm's target with the controller; checks the arm moves the right way |
+| `vr_sim` | A fake Quest and a simulated UR5, for testing everything in RViz |
+| `vr_interfaces`, `handeye_interfaces` | Custom messages and services |
+| `ur5_common` | Shared transform math |
 | `ur5_bringup` | Launch files, configs and RViz layouts |
-| `unity/RobotRegistration` | Quest 3 C# scripts (see [`unity/README.md`](unity/README.md)) |
+| `unity/RobotRegistration` | The Quest app's C# scripts (see [`unity/README.md`](unity/README.md)) |
 
 ## Setup (Ubuntu 22.04 + ROS 2 Humble)
 
@@ -76,133 +59,165 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
-Two pins in `requirements.txt` matter:
+Keep OpenCV below 5 and NumPy below 2 (`requirements.txt` pins both). OpenCV 5 dropped the hand-eye solvers, and Humble's `cv_bridge` needs NumPy 1.x.
 
-- **OpenCV < 5.** OpenCV 5.0's Python bindings don't expose `calibrateHandEye` or `calibrateRobotWorldHandEye`.
-- **NumPy < 2.** Humble's `cv_bridge` is compiled against NumPy 1.x.
+## Quick start: try it in simulation
 
-On the UR pendant, install the **External Control** URCap.
+No robot, cameras or headset needed:
 
-**Camera serial numbers are required** because there are two RealSenses. Find them with `rs-enumerate-devices -s`, then pass `wrist_cam_serial:=... table_cam_serial:=...` to every launch file below. If both cameras share one USB controller and frames drop, lower their resolution in `cameras.launch.py`.
+```bash
+ros2 launch ur5_bringup vr_sim.launch.py                            # you drag the controller
+ros2 launch ur5_bringup vr_sim.launch.py controller_mode:=scripted  # hands-free demo
+```
 
-## Step 1: Calibrate both cameras
+What happens:
 
-Print the ChArUco board (`ros2 run calib_target_detector generate_board --out board.png`) at 100% scale on A4 or Letter. Glue it to something rigid, measure a square, and set `square_length` in `config/calibration.yaml`.
+1. A fake Quest (`quest_sim`) "looks" at three virtual tags and sends camera images, just like the real headset.
+2. After ~4 s it registers itself. The log prints `Auto-registration succeeded`, and in RViz the estimated frame `vr_world` lands on the ground truth `vr_world_truth`.
+3. You drive the simulated arm with the controller:
+   - **Drag mode:** right-click the red *right controller* box, tick **Grip (drive the arm)**, then drag the box. The arm follows. Untick Grip to let go.
+   - **Scripted mode:** after 8 s the controller traces a 20 cm square with the grip held.
 
-Run one session per camera. The mount follows from the camera:
+Numbers worth checking:
 
-| Camera | Mount | Board placement |
+| Topic | Meaning | Typical sim value |
 |---|---|---|
-| `wrist_cam` | eye-in-hand | Fixed on the table |
-| `table_cam` | eye-to-hand | Clamped to the tool flange |
+| `/quest_sim/registration_error_m`, `_deg` | How far the registration is from the truth | ~4 mm, ~0.05° |
+| `/vr_alignment_monitor/direction_error_deg` | Angle between how your hand moved and how the arm moved | ~0.05° on straight moves (a few ° at the square's corners, where the arm lags) |
 
-**Start a session** on the PC wired to the robot and cameras:
+**Real headset + simulated arm:** `ros2 launch ur5_bringup vr_sim.launch.py quest:=real` lets you try the Quest app before the real robot is involved.
 
-```bash
-export WRIST_CAM_SERIAL=<SN> TABLE_CAM_SERIAL=<SN>     # from rs-enumerate-devices -s
-scripts/handeye_calibrate.sh <UR_IP> wrist_cam
-scripts/handeye_calibrate.sh <UR_IP> table_cam
-```
+## Using the real system
 
-The script runs preflight checks:
+Run these on the PC connected to the robot and cameras. You need each camera's serial number (`rs-enumerate-devices -s`), and the **External Control** URCap installed on the UR pendant.
 
-- the robot answers (ping, dashboard port 29999)
-- both RealSense serials are plugged in
-- which board size is configured
+### Step 1: Calibrate the cameras (once)
 
-Then it starts `calibration.launch.py` in the background (log: `~/.ros/handeye/session.log`) and opens an interactive console. Check the *Board detection* image in RViz: it shows the board axes and a reprojection error in green. Extra launch arguments pass straight through, e.g. `use_motion:=true rviz:=false`.
+1. Print the calibration board (`ros2 run calib_target_detector generate_board --out board.png`) at 100% scale, glue it to something flat and rigid, measure one square, and set `square_length` in `config/calibration.yaml`.
+2. Calibrate each camera:
+   ```bash
+   export WRIST_CAM_SERIAL=<SN> TABLE_CAM_SERIAL=<SN>
+   scripts/handeye_calibrate.sh <UR_IP> wrist_cam    # board fixed on the table
+   scripts/handeye_calibrate.sh <UR_IP> table_cam    # board clamped to the robot's flange
+   ```
+3. Freedrive the arm to a pose, let it stop, and press **Enter** to take a sample. Take 15–20 samples, and **rotate the wrist a lot** between them (±30° or more, about different axes). Only sliding the arm around without rotating can't be solved.
+4. Press **s** to solve and save. A good result is off by a few mm and well under 1°.
 
-**Collect 15–20 samples.** Freedrive the arm to a pose, let it stop, and press **Enter** in the console.
+Other console keys: `u` undo, `r` reset, `c` compute without saving, `?` status, `q` quit.
 
-- **Vary the wrist orientation a lot**, at least ±30° about two or more different axes. Translation-only motion can't be solved.
-- Each sample reports the rotation spread so far. Samples taken while the arm is moving or the board is out of view are rejected.
-- Freedrive sampling only needs the driver's joint states, so the External Control program doesn't have to be running.
-
-| Key | Action |
-|---|---|
-| Enter | take a sample |
-| `p` | take a sample and record the joint pose for replay (`use_motion:=true`) |
-| `u` / `r` | undo last sample / reset all |
-| `c` | compute and show the result |
-| `s` | compute and **save** |
-| `?` | board / robot TF status |
-| `q` | quit (stops the whole session) |
-
-**Solve and save** with `s`. This writes `~/.ros/handeye/<camera>.yaml` plus the raw samples. A good result has a residual of a few mm and well under 1°.
-
-**Prefer raw ROS?** Run:
+### Step 2 (optional): Find the cup
 
 ```bash
-ros2 launch ur5_bringup calibration.launch.py camera:=wrist_cam robot_ip:=<IP> wrist_cam_serial:=<SN> table_cam_serial:=<SN>
+ros2 launch ur5_bringup cup_detection.launch.py robot_ip:=<IP> wrist_cam_serial:=<SN> table_cam_serial:=<SN>
 ```
 
-Then either:
+The cup's pose streams on `/object_localization/target_pose` in `base_link`. Use `target_class:=bottle` (or any COCO class) to find something else.
 
-- `ros2 run handeye_calibration calibrate_cli` (or `scripts/handeye_calibrate.sh --console-only`), or
-- call `/handeye_calibration/take_sample` and `/handeye_calibration/compute` directly.
+### Step 3: Map the ArUco tags (once, or whenever tags move)
 
-**Compare solver methods offline** with `ros2 run handeye_calibration solve_offline ~/.ros/handeye/<camera>_samples.yaml`.
-
-**Repeatable re-calibration:** launch with `use_motion:=true`. During the first run, press `p` instead of Enter at each pose. Later, `/handeye_motion/run` replays those poses (in joint space, at ≤ 0.3 rad/s) and takes a sample at each one. Keep the e-stop within reach.
-
-## Step 2: Find the cup
-
-```bash
-ros2 launch ur5_bringup cup_detection.launch.py robot_ip:=<IP> wrist_cam_serial:=<SN> table_cam_serial:=<SN> \
-    detection_camera:=table_cam
-ros2 service call /object_localization/locate handeye_interfaces/srv/LocateObject "{class_name: cup, timeout_s: 2.0}"
-```
-
-The cup's pose also streams on `/object_localization/target_pose`, in `base_link`. Other options:
-
-- `target_class:=bottle`, or any other COCO class.
-- `model:=best.pt` for a fine-tuned model.
-- `surface_to_centre_m` (about 0.04 for a mug) to report the cup's centre instead of its front face.
-
-## Step 3: Map the ArUco tags
-
-1. **Print tags:** run `ros2 run aruco_tag_mapper generate_tags --ids 0 1 2 3 4 5 --out-dir tags/`. Each tag is 10 cm, from `DICT_4X4_50`. Measure the black square and set `marker_length` in `config/vr.yaml`.
-2. **Fix them flat** around the table, spread out (not in a line), where both cameras and the headset can see them.
-3. **Launch:**
+1. Print tags: `ros2 run aruco_tag_mapper generate_tags --ids 0 1 2 3 4 5 --out-dir tags/`. Measure the printed black square and set `marker_length` in `config/vr.yaml`.
+2. Tape them flat around the table, spread out, where the cameras and the headset can see them.
+3. Launch the robot, cameras and Quest connection:
    ```bash
    ros2 launch ur5_bringup vr.launch.py robot_ip:=<IP> wrist_cam_serial:=<SN> table_cam_serial:=<SN>
    ```
-   Then move the arm so the wrist camera also sweeps over the tags.
-4. **Save:**
+   Move the arm so the wrist camera also sweeps over the tags.
+4. Save the map:
    ```bash
    ros2 service call /aruco_tag_mapper/save std_srvs/srv/Trigger
    ```
-   This writes `~/.ros/handeye/tag_map.yaml`. For each tag it reports which cameras saw it and **how far apart the two cameras' estimates are**. A few mm means both hand-eye calibrations agree. Centimetres means one of them is off.
+   This writes `~/.ros/handeye/tag_map.yaml`. It also reports how far apart the two cameras' estimates of each tag are. A few mm means your calibrations agree; centimetres means one is off.
 
-## Step 4: Register the Quest 3
+### Step 4: Register the headset by looking at a tag
 
-With `vr.launch.py` still running (it also starts the ROS-TCP-Endpoint on port 10000), register from the headset using the Unity scripts. See [`unity/README.md`](unity/README.md).
+Keep `vr.launch.py` running. It also starts the ROS-TCP-Endpoint (port 10000) the Quest app connects to. Set up the Unity app first ([`unity/README.md`](unity/README.md)).
 
-- **Tag touch:** touch 3–6 tag centres with the controller tip. Expect about 1 cm.
-- **Controller on flange:** clamp the right controller to the flange and take 10–15 arm poses. Expect a few mm. This method doesn't need the tag map.
+1. In the headset, look at a mapped tag from about 0.5–1 m away and hold your head still for ~2 s.
+2. Press **A**, or call this from the PC:
+   ```bash
+   ros2 service call /vr_tag_detector/register vr_interfaces/srv/SolveRegistration "{save: true}"
+   ```
 
-The tag method uses `mode: yaw_only` by default. It assumes `base_link` is level (robot on a level table) and solves only position plus heading. With cm-level VR noise this is much more robust than a full 6-DOF fit; a unit test checks it. Set `mode: full` if the robot is mounted tilted.
+One tag is enough; 2–4 tags spread over the table are more accurate (about 1 cm) and let the result check itself. The registration is saved and reloaded on the next launch, as long as you don't move the Unity `RobotWorldFrame`.
 
-The result is published as static TF `base_link → vr_world` and saved to `~/.ros/handeye/vr_registration.yaml`. It's reloaded automatically on the next launch, as long as the Unity `RobotWorldFrame` hasn't moved. The game then subscribes to:
+Other ways to register: touch the tag centres with the controller tip, or clamp a controller to the robot's flange (the most accurate). Both are explained in [`unity/README.md`](unity/README.md).
 
-- `/vr/robot_base_pose`: where to place the UR5 model.
-- `/joint_states`: animates the arm.
-- `/vr/object_localization/target_pose`: the cup.
+### Step 5: Use the headset and controllers in your own robot code
+
+Once registered, `quest_bridge` publishes everything in the robot's frame using standard ROS messages:
+
+| What | Type |
+|---|---|
+| TF frames `quest_head`, `quest_left_controller`, `quest_right_controller` | TF (x axis = where you look / point) |
+| `/quest/head/pose`, `/quest/left_controller/pose`, `/quest/right_controller/pose` | `geometry_msgs/PoseStamped` in `base_link` |
+| `/quest/left_controller/joy`, `/quest/right_controller/joy` | `sensor_msgs/Joy`: `axes = [stick x, stick y, trigger, grip]`, `buttons = [A/X, B/Y, stick press, menu]` |
+| `/vr_teleop/target_pose` (with `teleop:=true`) | `geometry_msgs/PoseStamped`: where the tool should go while you hold the grip |
+
+A pose is only published while the controller is tracked. If your own launch already starts the UR driver, add `launch_robot:=false` to `vr.launch.py`.
+
+A minimal node that prints the right controller's position:
+
+```python
+import rclpy
+from rclpy.node import Node
+from rclpy.time import Time
+from tf2_ros import Buffer, TransformException, TransformListener
+
+rclpy.init()
+node = Node('controller_reader')
+tf_buffer = Buffer()
+tf_listener = TransformListener(tf_buffer, node)
+
+def tick():
+    try:
+        tf = tf_buffer.lookup_transform('base_link', 'quest_right_controller', Time())
+    except TransformException:
+        return                          # not registered yet, or never tracked
+    p = tf.transform.translation
+    node.get_logger().info(f'right controller at ({p.x:.3f}, {p.y:.3f}, {p.z:.3f}) m')
+
+node.create_timer(0.1, tick)
+rclpy.spin(node)
+```
+
+> **Safety:** nothing in this repo moves the real robot. `/vr_teleop/target_pose` is only a target. Your controller (or MoveIt Servo) must limit speed, because the target can jump.
+
+### Step 6: Check the arm moves in the controller's direction
+
+This tests your registration on the real robot without commanding it:
+
+```bash
+ros2 run vr_teleop alignment_monitor --ros-args -p engaged_topic:="''"
+```
+
+1. Hold the right controller firmly against the robot's flange.
+2. Put the arm in freedrive and push it in straight 10–20 cm lines (forward, sideways, up) without twisting the wrist.
+3. Each line prints one angle on `/vr_alignment_monitor/direction_error_deg`. A few degrees or less is good. If it's larger, re-register with more tags.
+
+## Tips and troubleshooting
+
+- **All parameters** live in `src/ur5_bringup/config/*.yaml`. Write decimals as `1.0`, not `1`: ROS 2 rejects an integer for a decimal parameter.
+- **Registration looks off?** Use more tags, spread them out, and hold your head still. The register reply lists each tag's *spread*. Over ~10 mm means the head moved, or the camera settings in the Unity app need checking (see the checklist in [`unity/README.md`](unity/README.md)).
+- **No controller poses?** Check the Quest app is connected (`ros2 topic hz /quest/state`) and that registration succeeded (`ros2 run tf2_ros tf2_echo base_link vr_world`).
+- **Saved files** are in `~/.ros/handeye/` (calibrations, tag map, registration). The simulation uses `~/.ros/vr_sim/` and never touches the real files.
 
 ## Tests
 
-The math is ROS-free and unit tested. The tests use synthetic ground truth for both hand-eye mounts and all five solvers, ChArUco and ArUco detection on rendered images, multi-camera tag fusion, point and controller-on-flange registration, and YAML round-trips. They pass on OpenCV 4.5 (Humble's system version) and 4.14:
+The math is ROS-free and unit tested against synthetic ground truth (calibration solvers, tag detection, registration, robot kinematics, teleop):
 
 ```bash
 colcon test && colcon test-result --verbose
 ```
 
-## Frames
+## Frames reference
 
 | Frame | Published by |
 |---|---|
-| `base_link` → … → `tool0` | UR driver |
-| `tool0` → `wrist_cam_link`, `base_link` → `table_cam_link` | `handeye_publisher` (computed so the RealSense's own `*_link → *_color_optical_frame` chain stays intact) |
-| `<cam>_link` → `<cam>_color_optical_frame` | RealSense drivers |
+| `base_link` → … → `tool0` | UR driver (in simulation: `robot_state_publisher` + `ur5_kinematic_sim`) |
+| `tool0` → `wrist_cam_link`, `base_link` → `table_cam_link` | `handeye_publisher` |
 | `base_link` → `tag_<id>` | `aruco_tag_mapper` |
-| `base_link` → `vr_world` | `vr_registration` (the Unity `RobotWorldFrame`, in ROS axes) |
+| `base_link` → `vr_world` | `vr_registration` (`vr_world` is the Unity `RobotWorldFrame`) |
+| `vr_world` → `quest_head`, `quest_left_controller`, `quest_right_controller` | `quest_bridge` |
+| `base_link` → `vr_world_truth` → `quest_*_truth` | `quest_sim` (simulation only: the ground truth) |
+
+Want more depth? Every node's file starts with a docstring that explains its parameters and topics, and [`unity/README.md`](unity/README.md) covers the Quest side in detail.
