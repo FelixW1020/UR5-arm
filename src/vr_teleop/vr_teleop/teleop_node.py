@@ -9,20 +9,25 @@ your own UR5 controller, or to vr_sim's ur5_kinematic_sim to try it in RViz firs
 
 Subscribes  joy_topic                 sensor_msgs/Joy (vr_tracking's quest_bridge)
 TF lookups  base_frame <- controller_frame  (needs the registration base_link -> vr_world)
+            base_frame <- vr_frame          (the registration itself; vr_frame '' skips it)
             base_frame <- tool_frame
 Publishes   ~/target_pose  PoseStamped (base_frame), only while engaged
             ~/engaged      std_msgs/Bool (transient local), on every change
             ~/markers      MarkerArray (base_frame): target axes, controller pointing arrow (x axis)
 
 Deadman: letting go of the grip, a Joy message older than joy_timeout_s (bridge or headset gone)
-or a controller pose older than that (tracking lost) releases the clutch. Engaging always starts
-from the current controller and tool poses, so the arm never jumps to where the hand went while
-the clutch was open.
+or a controller pose older than that (tracking lost) releases the clutch. So does anything that
+would move the target without the hand moving: a new registration (base_frame <- vr_frame
+changed) or a controller pose that jumps more than max_step_m / max_step_deg between two steps
+(tracking snapping back). Engaging always starts from the current controller and tool poses, so
+the arm never jumps to where the hand went while the clutch was open; with the grip still held
+it re-engages on the next step. It does not engage while tool0 is outside the workspace box.
 """
 import numpy as np
 import rclpy
 from geometry_msgs.msg import PoseStamped
 from rclpy.duration import Duration
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, qos_profile_sensor_data
 from rclpy.time import Time
@@ -33,7 +38,8 @@ from visualization_msgs.msg import MarkerArray
 
 from ur5_common.ros_conversions import matrix_to_pose, transform_to_matrix
 from vr_teleop import markers
-from vr_teleop.mapping import ClutchMapper
+from vr_teleop.mapping import (REGISTRATION_CHANGE_DEG, REGISTRATION_CHANGE_M, ClutchMapper,
+                               pose_change)
 
 
 class TeleopNode(Node):
@@ -42,11 +48,14 @@ class TeleopNode(Node):
         super().__init__('vr_teleop')
         self.declare_parameter('base_frame', 'base_link')
         self.declare_parameter('controller_frame', 'quest_right_controller')
+        self.declare_parameter('vr_frame', 'vr_world')     # '' = don't watch the registration
         self.declare_parameter('tool_frame', 'tool0')
         self.declare_parameter('joy_topic', '/quest/right_controller/joy')
         self.declare_parameter('clutch_axis', 3)            # hand_trigger (grip)
         self.declare_parameter('clutch_threshold', 0.5)
         self.declare_parameter('joy_timeout_s', 0.5)
+        self.declare_parameter('max_step_m', 0.1)           # controller jump that releases
+        self.declare_parameter('max_step_deg', 45.0)
         self.declare_parameter('rate_hz', 50.0)
         self.declare_parameter('scale', 1.0)                # tool motion / hand motion
         self.declare_parameter('follow_orientation', True)
@@ -55,13 +64,17 @@ class TeleopNode(Node):
 
         g = lambda n: self.get_parameter(n).value  # noqa: E731
         self._base, self._ctrl, self._tool = g('base_frame'), g('controller_frame'), g('tool_frame')
+        self._vr = g('vr_frame')
         self._axis, self._threshold = g('clutch_axis'), g('clutch_threshold')
         self._timeout = Duration(seconds=g('joy_timeout_s'))
+        self._max_step_m, self._max_step_deg = g('max_step_m'), g('max_step_deg')
         self._mapper = ClutchMapper(g('scale'), g('follow_orientation'),
                                     g('workspace_min'), g('workspace_max'))
         self._marker_lifetime = Duration(seconds=max(0.5, 3.0 / g('rate_hz'))).to_msg()
         self._joy = None
         self._joy_time = None
+        self._T_reg0 = None         # base_frame <- vr_frame at engage
+        self._T_ctrl_prev = None    # controller pose at the previous engaged step
 
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
@@ -100,13 +113,14 @@ class TeleopNode(Node):
         except ConnectivityException as e:
             hint = ('the registration base_link -> vr_world is missing: register the headset '
                     '(vr_tag_detector ~/register or vr_registration) or check that '
-                    'vr_registration loaded a saved one' if frame == self._ctrl else
+                    'vr_registration loaded a saved one' if frame in (self._ctrl, self._vr) else
                     'the robot TF tree is not connected to it')
             self.get_logger().warn(f'{self._base} and {frame} are not connected in TF; {hint}. '
                                    f'({e})', throttle_duration_sec=5.0)
             return None
         except TransformException as e:
             hint = ('is quest_bridge running and the controller tracked?' if frame == self._ctrl
+                    else 'is the headset registered (vr_registration)?' if frame == self._vr
                     else 'is the UR driver / robot_state_publisher (or ur5_kinematic_sim) up?')
             self.get_logger().warn(f'No TF {self._base} <- {frame}: {hint} ({e})',
                                    throttle_duration_sec=5.0)
@@ -130,6 +144,41 @@ class TeleopNode(Node):
             self._mapper.release()
             self.get_logger().info(f'Clutch released ({reason}).')
 
+    def _engage(self, T_ctrl, now):
+        """Anchor the clutch at the current controller, tool and registration (if all known)."""
+        T_tool = self._lookup(self._tool, now)
+        if T_tool is None:
+            return
+        p = T_tool[:3, 3]
+        if not self._mapper.in_workspace(p):
+            # Engaging would clamp the target into the box and pull the arm to its edge.
+            self.get_logger().warn(
+                f'Not engaging: {self._tool} at {np.round(p, 3).tolist()} is outside the '
+                f'workspace box {self._mapper.workspace_min.tolist()} .. '
+                f'{self._mapper.workspace_max.tolist()} ({self._base}). Move the arm into it or '
+                'widen workspace_min / workspace_max.', throttle_duration_sec=5.0)
+            return
+        T_reg = self._lookup(self._vr, now) if self._vr else None
+        if self._vr and T_reg is None:
+            return
+        self._mapper.engage(T_ctrl, T_tool)
+        self._T_reg0, self._T_ctrl_prev = T_reg, T_ctrl
+        self._set_engaged(True)
+
+    def _jump(self, T_ctrl, now):
+        """Why the target would move without the hand moving ('' if it would not)."""
+        if self._vr:
+            T_reg = self._lookup(self._vr, now)
+            if T_reg is None:
+                return 'registration lost'
+            d_m, d_deg = pose_change(self._T_reg0, T_reg)
+            if d_m > REGISTRATION_CHANGE_M or d_deg > REGISTRATION_CHANGE_DEG:
+                return f'registration changed by {d_m * 1000:.0f} mm / {d_deg:.2f} deg'
+        d_m, d_deg = pose_change(self._T_ctrl_prev, T_ctrl)
+        if d_m > self._max_step_m or d_deg > self._max_step_deg:
+            return f'controller pose jumped {d_m * 100:.0f} cm / {d_deg:.0f} deg in one step'
+        return ''
+
     def _step(self):
         now = self.get_clock().now()
         pressed, reason = self._clutch(now)
@@ -143,17 +192,14 @@ class TeleopNode(Node):
         if not pressed or T_ctrl is None:
             if self._mapper.engaged:
                 self._set_engaged(False, reason if not pressed else 'controller pose lost')
+        elif self._mapper.engaged and (jump := self._jump(T_ctrl, now)):
+            # Re-engage on the next step (grip still held), from the poses as they are then.
+            self._set_engaged(False, jump)
         else:
             if not self._mapper.engaged:
-                T_tool = self._lookup(self._tool, now)
-                if T_tool is not None:
-                    if not np.allclose(self._mapper.clamp(T_tool[:3, 3]), T_tool[:3, 3]):
-                        self.get_logger().warn(
-                            f'{self._tool} is outside the workspace box; the target is clamped '
-                            'into it, so the arm will move to the box edge.')
-                    self._mapper.engage(T_ctrl, T_tool)
-                    self._set_engaged(True)
+                self._engage(T_ctrl, now)
             if self._mapper.engaged:
+                self._T_ctrl_prev = T_ctrl
                 T_target = self._mapper.target(T_ctrl)
                 self._target_pub.publish(PoseStamped(header=header, pose=matrix_to_pose(T_target)))
                 out.markers += markers.axes(header, 'target', T_target)
@@ -168,8 +214,11 @@ def main():
     node = TeleopNode()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except Exception:
+        if rclpy.ok():
+            raise       # a Ctrl-C landing inside a message callback surfaces as another error
     finally:
         node.destroy_node()
         rclpy.try_shutdown()

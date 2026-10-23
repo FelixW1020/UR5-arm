@@ -6,7 +6,8 @@ Subscribes target_topic (geometry_msgs/PoseStamped of tool0 in base_frame, e.g. 
 /vr_teleop/target_pose) and publishes /joint_states for robot_state_publisher, so RViz shows
 the arm and TF base_link -> tool0 exists exactly as with the real driver. Each tick refines a
 damped-least-squares IK solution (warm-started from the previous one) and moves the joints
-toward it at no more than max_joint_velocity.
+toward it at no more than max_joint_velocity (all joints slowed together, so they arrive
+together and the tool keeps to the commanded path).
 
   ~/home   std_srvs/Trigger   drop the target and return to initial_positions
 
@@ -20,6 +21,7 @@ import threading
 import numpy as np
 import rclpy
 from geometry_msgs.msg import PoseStamped
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.time import Time
 from sensor_msgs.msg import JointState
@@ -111,7 +113,7 @@ class UR5KinematicSim(Node):
                         f'Target not reachable: closest tool0 pose is off by '
                         f'{pos_err * 1000:.0f} mm / {np.degrees(rot_err):.1f} deg.',
                         throttle_duration_sec=5.0)
-            dq = np.clip(self._q_goal - self._q, -self._max_step, self._max_step)
+            dq = uk.limit_joint_step(self._q_goal - self._q, self._max_step)
             self._q = self._q + dq
             q = self._q.copy()
         msg = JointState()
@@ -160,8 +162,11 @@ def main():
     node = UR5KinematicSim()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except Exception:
+        if rclpy.ok():
+            raise       # a Ctrl-C landing inside a message callback surfaces as another error
     finally:
         node.destroy_node()
         rclpy.try_shutdown()

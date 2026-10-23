@@ -108,6 +108,22 @@ def summarize(estimates, max_spread_m, residuals_m=None):
     return lines, noisy
 
 
+def tag_map_mismatch(tag_map, marker_length, dictionary):
+    """Why the robot's tag map (its YAML as a dict) describes other tags than this detector.
+
+    Returns '' if it doesn't. A wrong marker_length scales every tag's distance from the
+    headset, so a one-tag registration comes out centimetres off with a residual of 0.
+    """
+    problems = []
+    length = tag_map.get('marker_length')
+    if length is not None and abs(float(length) - float(marker_length)) > 1e-4:
+        problems.append(f'marker_length is {marker_length} m here but {length} m in the tag map')
+    name = tag_map.get('dictionary')
+    if name and name != dictionary:
+        problems.append(f'dictionary is {dictionary} here but {name} in the tag map')
+    return '; '.join(problems)
+
+
 def draw_debug(gray, sightings, K, D, axis_length):
     """BGR image: accepted tags in green with their axes, rejected ones in red with the reason."""
     img = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)

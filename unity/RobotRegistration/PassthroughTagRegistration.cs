@@ -15,6 +15,7 @@ using UnityEngine.Events;
 ///   B                      : clear the sightings and stream again
 ///
 /// A and B are also TagTouchRegistration's buttons: enable only one registration script at a time.
+/// After a headset recenter the old sightings are cleared automatically: look at the tags again.
 /// </summary>
 public class PassthroughTagRegistration : MonoBehaviour
 {
@@ -41,6 +42,7 @@ public class PassthroughTagRegistration : MonoBehaviour
     bool _busy;
     string _reply = "";
     float _nextStatus;
+    int _generation;                      // RobotWorldFrame.Generation of the current sightings
 
     void Awake()
     {
@@ -51,7 +53,10 @@ public class PassthroughTagRegistration : MonoBehaviour
     {
         if (_ros != null) return;
         _ros = ROSConnection.GetOrCreateInstance();
-        _ros.RegisterRosService<SolveRegistrationRequest, SolveRegistrationResponse>(registerService);
+        // By name: in a player build the generated Register() runs after the first scene's
+        // OnEnable, so the generic overload would announce the service with no type.
+        _ros.RegisterRosService(registerService, SolveRegistrationRequest.k_RosMessageName,
+                                SolveRegistrationResponse.k_RosMessageName);
         TriggerResult.Register();
         _ros.RegisterRosService(resetService, TriggerResult.k_RosMessageName, TriggerResult.k_RosMessageName);
     }
@@ -73,7 +78,9 @@ public class PassthroughTagRegistration : MonoBehaviour
     {
         if (!_busy)
         {
-            if (OVRInput.GetDown(registerButton, controller)) Register();
+            // Sightings from before a recenter are in the old vr_world: start over.
+            if (RobotWorldFrame.CurrentGeneration != _generation) ResetSightings();
+            else if (OVRInput.GetDown(registerButton, controller)) Register();
             else if (OVRInput.GetDown(resetButton, controller)) ResetSightings();
         }
         if (Time.unscaledTime >= _nextStatus) ShowStatus();
@@ -88,6 +95,7 @@ public class PassthroughTagRegistration : MonoBehaviour
     public async void Register()
     {
         EnsureRos();
+        int generation = _generation;
         _busy = true;
         _reply = "Registering...";
         ShowStatus();
@@ -104,6 +112,7 @@ public class PassthroughTagRegistration : MonoBehaviour
             if (r.success)
             {
                 if (stopStreamingWhenRegistered && streamer != null) streamer.enabled = false;
+                RobotWorldFrame.Registered(generation);
                 onRegistered?.Invoke();
             }
         }
@@ -121,6 +130,7 @@ public class PassthroughTagRegistration : MonoBehaviour
     async void Clear(bool blockButtons)
     {
         EnsureRos();
+        _generation = RobotWorldFrame.CurrentGeneration;
         _busy |= blockButtons;
         var r = await _ros.CallService<TriggerResult>(resetService, new EmptyRequest(TriggerResult.k_RosMessageName),
                                                       Mathf.Min(serviceTimeoutS, 5f));
@@ -139,6 +149,8 @@ public class PassthroughTagRegistration : MonoBehaviour
             ? "Look at the tag(s) from 0.4-1.2 m, hold still ~2 s each. A = register, B = start over."
             : "A = register again, B = start over.";
         string text = $"{camera}\n{help}" + (_reply.Length > 0 ? $"\n{_reply}" : "");
+        if (RobotWorldFrame.Instance != null && RobotWorldFrame.Instance.RegistrationStale)
+            text = "Headset recentered: the robot registration no longer holds. Register again.\n" + text;
         if (status != null) status.text = text;
     }
 }

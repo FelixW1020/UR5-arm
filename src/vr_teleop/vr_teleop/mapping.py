@@ -11,7 +11,7 @@ arm forward; a heading error in the registration makes the arm move off at that 
 """
 import numpy as np
 
-from ur5_common.transforms import make_transform
+from ur5_common.transforms import make_transform, rotation_angle
 
 
 def _vec3(v, name):
@@ -21,6 +21,17 @@ def _vec3(v, name):
     if v.shape != (3,):
         raise ValueError(f'{name} must have 3 elements, got {v.size}')
     return v
+
+
+# A registration (base_link -> vr_world) that moved by more than this was replaced.
+REGISTRATION_CHANGE_M, REGISTRATION_CHANGE_DEG = 0.001, 0.05
+
+
+def pose_change(T_a, T_b):
+    """(distance m, angle deg) from pose T_a to pose T_b."""
+    T_a, T_b = np.asarray(T_a, dtype=float), np.asarray(T_b, dtype=float)
+    return (float(np.linalg.norm(T_b[:3, 3] - T_a[:3, 3])),
+            float(np.degrees(rotation_angle(T_b[:3, :3] @ T_a[:3, :3].T))))
 
 
 class ClutchMapper:
@@ -57,6 +68,9 @@ class ClutchMapper:
         if self.workspace_max is not None:
             p = np.minimum(p, self.workspace_max)
         return p
+
+    def in_workspace(self, p):
+        return bool(np.allclose(self.clamp(p), p))
 
     def target(self, T_base_ctrl):
         """T_base_target for the current controller pose (call only while engaged)."""

@@ -66,7 +66,9 @@ public class PassthroughFrameStreamer : MonoBehaviour
         if (_ros == null)
         {
             _ros = ROSConnection.GetOrCreateInstance();
-            _ros.RegisterPublisher<PassthroughFrameMsg>(topic);
+            // By name: in a player build the generated Register() runs after the first scene's
+            // OnEnable, so RegisterPublisher<T> here would announce the topic with no type.
+            _ros.RegisterPublisher(topic, PassthroughFrameMsg.k_RosMessageName);
         }
         _hasPose = _moving = false;
         if (cameraSource != null) cameraSource.SetStreaming(true);

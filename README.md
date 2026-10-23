@@ -83,9 +83,9 @@ Numbers worth checking:
 | Topic | Meaning | Typical sim value |
 |---|---|---|
 | `/quest_sim/registration_error_m`, `_deg` | How far the registration is from the truth | ~4 mm, ~0.05° |
-| `/vr_alignment_monitor/direction_error_deg` | Angle between how your hand moved and how the arm moved | ~0.05° on straight moves (a few ° at the square's corners, where the arm lags) |
+| `/vr_alignment_monitor/direction_error_deg` | Angle between how your hand moved and how the arm moved | ~0.05° on slow, straight moves. It is larger when you move fast, and spikes at sharp corners, because the arm lags behind your hand |
 
-**Real headset + simulated arm:** `ros2 launch ur5_bringup vr_sim.launch.py quest:=real` lets you try the Quest app before the real robot is involved.
+**Real headset + simulated arm:** `ros2 launch ur5_bringup vr_sim.launch.py quest:=real` lets you try the Quest app before the real arm moves. It still needs a tag map to register against. Use the one from Step 3, or pass `tag_map_file:=<file>` with your tags' positions in `base_link`. The sim writes an example to `~/.ros/vr_sim/tag_map.yaml`.
 
 ## Using the real system
 
@@ -115,7 +115,7 @@ The cup's pose streams on `/object_localization/target_pose` in `base_link`. Use
 
 ### Step 3: Map the ArUco tags (once, or whenever tags move)
 
-1. Print tags: `ros2 run aruco_tag_mapper generate_tags --ids 0 1 2 3 4 5 --out-dir tags/`. Measure the printed black square and set `marker_length` in `config/vr.yaml`.
+1. Print tags: `ros2 run aruco_tag_mapper generate_tags --ids 0 1 2 3 4 5 --out-dir tags/`. Measure the printed black square and set `marker_length` in **both** the `aruco_tag_mapper` and `vr_tag_detector` sections of `config/vr.yaml`. If the two don't match, the headset refuses to register and tells you why.
 2. Tape them flat around the table, spread out, where the cameras and the headset can see them.
 3. Launch the robot, cameras and Quest connection:
    ```bash
@@ -138,7 +138,9 @@ Keep `vr.launch.py` running. It also starts the ROS-TCP-Endpoint (port 10000) th
    ros2 service call /vr_tag_detector/register vr_interfaces/srv/SolveRegistration "{save: true}"
    ```
 
-One tag is enough; 2–4 tags spread over the table are more accurate (about 1 cm) and let the result check itself. The registration is saved and reloaded on the next launch, as long as you don't move the Unity `RobotWorldFrame`.
+One tag is enough; 2–4 tags spread over the table are more accurate (about 1 cm) and let the result check itself. The registration is saved and reloaded on the next launch.
+
+**Recentering the headset** (holding the Meta button) shifts the headset's world, so the registration no longer fits. The app notices this, stops sending poses and asks you to register again. Also register again if you move the Unity `RobotWorldFrame`, or if the tag squares shown in VR no longer sit on the printed tags.
 
 Other ways to register: touch the tag centres with the controller tip, or clamp a controller to the robot's flange (the most accurate). Both are explained in [`unity/README.md`](unity/README.md).
 
@@ -153,12 +155,17 @@ Once registered, `quest_bridge` publishes everything in the robot's frame using 
 | `/quest/left_controller/joy`, `/quest/right_controller/joy` | `sensor_msgs/Joy`: `axes = [stick x, stick y, trigger, grip]`, `buttons = [A/X, B/Y, stick press, menu]` |
 | `/vr_teleop/target_pose` (with `teleop:=true`) | `geometry_msgs/PoseStamped`: where the tool should go while you hold the grip |
 
-A pose is only published while the controller is tracked. If your own launch already starts the UR driver, add `launch_robot:=false` to `vr.launch.py`.
+Once the tags are mapped, you don't need the cameras any more. If your own launch already starts the UR driver, start only the headset side (Quest connection, registration, `quest_bridge`):
 
-A minimal node that prints the right controller's position:
+```bash
+ros2 launch ur5_bringup vr.launch.py launch_robot:=false launch_cameras:=false rviz:=false
+```
+
+When a controller loses tracking, its `/quest/*/pose` topic simply stops. TF instead keeps returning the **last** pose, so always check how old a TF pose is. A minimal node that prints the right controller's position:
 
 ```python
 import rclpy
+from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.time import Time
 from tf2_ros import Buffer, TransformException, TransformListener
@@ -172,7 +179,11 @@ def tick():
     try:
         tf = tf_buffer.lookup_transform('base_link', 'quest_right_controller', Time())
     except TransformException:
-        return                          # not registered yet, or never tracked
+        return                          # not registered yet, or never seen
+    age = node.get_clock().now() - Time.from_msg(tf.header.stamp)
+    if age > Duration(seconds=0.2):
+        node.get_logger().info('right controller not tracked')
+        return                          # tracking lost: this is an old pose
     p = tf.transform.translation
     node.get_logger().info(f'right controller at ({p.x:.3f}, {p.y:.3f}, {p.z:.3f}) m')
 
@@ -184,15 +195,17 @@ rclpy.spin(node)
 
 ### Step 6: Check the arm moves in the controller's direction
 
-This tests your registration on the real robot without commanding it:
+This tests your registration on the real robot without commanding it. With `vr.launch.py` running (without `teleop:=true`) and the headset registered:
 
 ```bash
-ros2 run vr_teleop alignment_monitor --ros-args -p engaged_topic:="''"
+ros2 run vr_teleop alignment_monitor --ros-args -p engaged_topic:="''" -p min_motion_m:=0.10 -p summary_every:=1
 ```
 
 1. Hold the right controller firmly against the robot's flange.
-2. Put the arm in freedrive and push it in straight 10–20 cm lines (forward, sideways, up) without twisting the wrist.
-3. Each line prints one angle on `/vr_alignment_monitor/direction_error_deg`. A few degrees or less is good. If it's larger, re-register with more tags.
+2. Put the arm in freedrive and push it in straight **horizontal** 10–20 cm lines (forward/back, left/right) without twisting the wrist.
+3. Every 10 cm of motion prints one angle (also on `/vr_alignment_monitor/direction_error_deg`). This is your registration's heading error. A few degrees or less is good. If it's larger, re-register with more tags.
+
+Don't judge by up/down lines: they read about 0° even when the heading is off.
 
 ## Tips and troubleshooting
 

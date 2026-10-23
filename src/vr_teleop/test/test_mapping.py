@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from ur5_common.transforms import make_transform, quat_to_matrix
-from vr_teleop.mapping import ClutchMapper
+from vr_teleop.mapping import ClutchMapper, pose_change
 
 
 def _rot(axis, angle):
@@ -88,3 +88,18 @@ def test_follow_orientation_false():
     T = m.target(ctrl)
     assert np.allclose(T[:3, :3], TOOL0[:3, :3])
     assert np.allclose(T[:3, 3], TOOL0[:3, 3] + [0.0, 0.1, 0.0])
+
+
+def test_pose_change():
+    T = make_transform(_rot([0, 0, 1], 0.3), [0.1, 0.2, 0.3])
+    assert pose_change(T, T) == (0.0, 0.0)
+    T2 = make_transform(_rot([1, 0, 0], np.radians(2.0)) @ T[:3, :3], T[:3, 3] + [0.0, 0.03, 0.04])
+    d_m, d_deg = pose_change(T, T2)
+    assert abs(d_m - 0.05) < 1e-12 and abs(d_deg - 2.0) < 1e-9
+
+
+def test_in_workspace():
+    m = ClutchMapper(workspace_min=[-1, -1, 0], workspace_max=[1, 1, 1])
+    assert m.in_workspace([0.5, 0.5, 0.5]) and m.in_workspace([1.0, -1.0, 0.0])
+    assert not m.in_workspace([0.5, 0.5, -0.01])
+    assert ClutchMapper().in_workspace([5.0, 5.0, 5.0])

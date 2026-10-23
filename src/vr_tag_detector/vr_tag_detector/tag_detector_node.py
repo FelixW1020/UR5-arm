@@ -14,14 +14,19 @@ Publishes
 Services
   ~/register          vr_interfaces/SolveRegistration   fused tags -> registration_service
   ~/reset             std_srvs/Trigger                  forget all sightings
+
+~/register refuses if marker_length or dictionary differ from the ones recorded in the robot's
+tag map (tag_map_file): the two must describe the same printed tags.
 """
+import os
 import threading
 import time
 
 import rclpy
+import yaml
 from geometry_msgs.msg import Point, Quaternion
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
-from rclpy.executors import MultiThreadedExecutor
+from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import QoSProfile
 from sensor_msgs.msg import Image
@@ -58,6 +63,7 @@ class TagDetectorNode(Node):
         self.declare_parameter('max_spread_m', 0.03)
         self.declare_parameter('registration_service', '/vr_registration/register_tags')
         self.declare_parameter('registration_timeout_s', 10.0)
+        self.declare_parameter('tag_map_file', '~/.ros/handeye/tag_map.yaml')   # '' = no check
         self.declare_parameter('debug_image_rate_hz', 2.0)
 
         g = lambda n: self.get_parameter(n).value  # noqa: E731
@@ -85,6 +91,9 @@ class TagDetectorNode(Node):
         self.create_timer(1.0, self._publish_markers)
         self.get_logger().info(f'Looking for {g("dictionary")} tags {ids or "(any id)"} '
                                f'on {g("frame_topic")}')
+        mismatch = self._tag_map_mismatch()
+        if mismatch:
+            self.get_logger().warn(mismatch)
 
     # ------------------------------------------------------------------ frames
     def _on_frame(self, msg: PassthroughFrame):
@@ -140,10 +149,31 @@ class TagDetectorNode(Node):
         with self._lock:
             return self._map.estimate(min_observations)
 
+    def _tag_map_mismatch(self):
+        """'' or why this detector's tags differ from those in tag_map_file."""
+        path = os.path.expanduser(self.get_parameter('tag_map_file').value)
+        if not path or not os.path.exists(path):
+            return ''                   # vr_registration reports a missing map itself
+        try:
+            with open(path) as f:
+                data = yaml.safe_load(f) or {}
+        except (OSError, yaml.YAMLError) as e:
+            return f'Cannot read the tag map {path}: {e}'
+        mismatch = pt.tag_map_mismatch(data, self.get_parameter('marker_length').value,
+                                       self.get_parameter('dictionary').value)
+        return (f'The tag map {path} was made with other tags: {mismatch}. Set marker_length '
+                'and dictionary in BOTH the aruco_tag_mapper and vr_tag_detector sections of '
+                'config/vr.yaml (measure the printed black square).') if mismatch else ''
+
     # ------------------------------------------------------------------ services
     def _register(self, request, response):
         g = lambda n: self.get_parameter(n).value  # noqa: E731
         response.success = False
+        mismatch = self._tag_map_mismatch()
+        if mismatch:
+            response.message = f'Not registering. {mismatch}'
+            self.get_logger().warn(response.message)
+            return response
         est = self._estimates(g('min_observations'))
         if not est:
             seen = {i: e.num_observations for i, e in sorted(self._estimates(1).items())}
@@ -248,7 +278,7 @@ def main():
     executor.add_node(node)
     try:
         executor.spin()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         node.destroy_node()

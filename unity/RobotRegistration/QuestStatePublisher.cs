@@ -31,7 +31,7 @@ public class QuestStatePublisher : MonoBehaviour
         if (cameraRig == null) cameraRig = FindAnyObjectByType<OVRCameraRig>();
         if (cameraRig == null) Debug.LogError("[QuestStatePublisher] No OVRCameraRig in the scene.");
         _ros = ROSConnection.GetOrCreateInstance();
-        _ros.RegisterPublisher<QuestStateMsg>(topic);
+        _ros.RegisterPublisher(topic, QuestStateMsg.k_RosMessageName);
     }
 
     // LateUpdate: the rig has moved its anchors to this frame's tracking poses by now.
@@ -42,22 +42,25 @@ public class QuestStatePublisher : MonoBehaviour
         if (frame == null || cameraRig == null || now < _next) return;
         _next = now - _next > period ? now + period : _next + period;   // no burst after a stall
 
+        // After a recenter vr_world has moved, so the poses would be wrong in base_link: send
+        // them as untracked (buttons still go through) until the headset is registered again.
+        bool valid = !frame.RegistrationStale;
         _ros.Publish(topic, new QuestStateMsg
         {
             header = new HeaderMsg { stamp = RosUtil.Stamp(DateTime.UtcNow), frame_id = RobotWorldFrame.RosFrameId },
-            head_tracked = OVRPlugin.GetNodePositionTracked(OVRPlugin.Node.Head),
+            head_tracked = valid && OVRPlugin.GetNodePositionTracked(OVRPlugin.Node.Head),
             head = frame.ToRosPose(cameraRig.centerEyeAnchor),
-            left = Controller(frame, cameraRig.leftControllerAnchor, OVRInput.Controller.LTouch),
-            right = Controller(frame, cameraRig.rightControllerAnchor, OVRInput.Controller.RTouch),
+            left = Controller(frame, cameraRig.leftControllerAnchor, OVRInput.Controller.LTouch, valid),
+            right = Controller(frame, cameraRig.rightControllerAnchor, OVRInput.Controller.RTouch, valid),
         });
     }
 
-    static ControllerStateMsg Controller(RobotWorldFrame frame, Transform anchor, OVRInput.Controller c)
+    static ControllerStateMsg Controller(RobotWorldFrame frame, Transform anchor, OVRInput.Controller c, bool valid)
     {
         var stick = OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick, c);
         return new ControllerStateMsg
         {
-            tracked = anchor != null && OVRInput.GetControllerPositionTracked(c),
+            tracked = valid && anchor != null && OVRInput.GetControllerPositionTracked(c),
             pose = anchor != null ? frame.ToRosPose(anchor) : new PoseMsg(),
             index_trigger = OVRInput.Get(OVRInput.Axis1D.PrimaryIndexTrigger, c),
             hand_trigger = OVRInput.Get(OVRInput.Axis1D.PrimaryHandTrigger, c),

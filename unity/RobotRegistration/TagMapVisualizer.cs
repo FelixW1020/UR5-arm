@@ -20,7 +20,8 @@ public class TagMapVisualizer : MonoBehaviour
     void Start()
     {
         _ros = ROSConnection.GetOrCreateInstance();
-        _ros.RegisterRosService<GetTagMapRequest, GetTagMapResponse>(serviceName);
+        _ros.RegisterRosService(serviceName, GetTagMapRequest.k_RosMessageName,
+                                GetTagMapResponse.k_RosMessageName);
         Refresh();
     }
 

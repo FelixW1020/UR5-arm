@@ -170,6 +170,33 @@ def test_ik_step_limit():
     assert np.max(np.abs(q - q0)) <= 0.05 + 1e-12
 
 
+def test_limit_joint_step_keeps_direction():
+    dq = np.array([0.5, -0.1, 0.02, 0.0, 0.3, -0.04])
+    out = uk.limit_joint_step(dq, 0.02)
+    assert abs(np.max(np.abs(out)) - 0.02) < 1e-12
+    assert abs(np.dot(out, dq) / (np.linalg.norm(out) * np.linalg.norm(dq)) - 1.0) < 1e-12
+    small = dq * 0.01
+    assert np.array_equal(uk.limit_joint_step(small, 0.02), small)
+
+
+def test_velocity_limited_arm_follows_a_straight_line():
+    """ur5_kinematic_sim's tick loop: a fast (1 m/s) straight hand move keeps tool0 near the line."""
+    rate, max_step = 50.0, 1.0 / 50.0
+    q = q_goal = np.array([0.0, -1.5708, 1.5708, -1.5708, -1.5708, 0.0])
+    T0 = uk.fk(q)
+    p0, direction = T0[:3, 3].copy(), np.array([1.0, 0.0, 0.0])
+    worst = 0.0
+    for k in range(int(3.2 * rate)):
+        T = T0.copy()
+        T[:3, 3] = p0 + direction * min(0.2, k / rate)
+        q_goal, _, _ = uk.solve_ik(q_goal, T, max_iterations=10)
+        q = q + uk.limit_joint_step(q_goal - q, max_step)
+        off = uk.fk(q)[:3, 3] - p0
+        worst = max(worst, np.linalg.norm(off - np.dot(off, direction) * direction))
+    assert np.linalg.norm(uk.fk(q)[:3, 3] - (p0 + 0.2 * direction)) < 1e-3
+    assert worst < 0.015            # clipping each joint on its own strays ~6 cm
+
+
 def _axis(rng):
     a = rng.normal(size=3)
     return a / np.linalg.norm(a)

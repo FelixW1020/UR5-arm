@@ -35,6 +35,7 @@ import numpy as np
 import rclpy
 from geometry_msgs.msg import PoseStamped, TransformStamped
 from rclpy.duration import Duration
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.time import Time
@@ -222,8 +223,11 @@ def main():
     node = QuestBridgeNode()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except Exception:
+        if rclpy.ok():
+            raise       # a Ctrl-C landing inside a message callback surfaces as another error
     finally:
         node.destroy_node()
         rclpy.try_shutdown()

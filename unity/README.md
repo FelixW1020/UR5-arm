@@ -11,7 +11,12 @@ base_link (robot) ──[vr_registration, static TF]──► vr_world ══ Ro
                                                        └─[vr_tracking/quest_bridge, TF]──► quest_head, quest_left_controller, quest_right_controller
 ```
 
-- `RobotWorldFrame` is an empty GameObject you place once in the room. Every pose sent to or received from ROS is relative to it, so recentering the headset doesn't break the alignment.
+- `RobotWorldFrame` is an empty GameObject you place once in the room. Every pose sent to or received from ROS is relative to it.
+- **Recentering the headset moves it.** Holding the Meta button (or *Reset View*) shifts Unity's whole world in the room, `RobotWorldFrame` included, so the registration no longer holds. `RobotWorldFrame` notices the recenter and sets `RegistrationStale`. Until the next successful registration:
+  - `QuestStatePublisher` sends everything as untracked, so nothing on the robot side follows wrong poses;
+  - the registration scripts drop the sightings, touches or samples collected before the recenter, and say so in their status.
+
+  Two things keep `vr_world` fixed through a recenter: the *Stage* tracking origin (recentering off, needs a boundary), or a localized `OVRSpatialAnchor` on `RobotWorldFrame` that you save and reload yourself.
 - Coordinates are converted with ROS-TCP-Connector's `FLU` helpers (x forward, y left, z up, the ROS convention). The ROS side never sees Unity's left-handed Y-up axes. An object's Unity forward becomes ROS x: `quest_head` x is the gaze direction, a controller's x is its pointing direction.
 - After registration, ROS republishes poses in `vr_world`. `RosPoseFollower` places objects from those topics:
   - `/vr/robot_base_pose`: where to put the UR5 model.
@@ -53,7 +58,7 @@ base_link (robot) ──[vr_registration, static TF]──► vr_world ══ Ro
 ### Scene
 
 - An `OVRCameraRig` with Tracking Origin Type set to *Floor Level*. On its OVR Manager, set Passthrough Support to *Supported* (or *Required*) and tick *Enable Passthrough*.
-- An empty `RobotWorldFrame`. Optionally add an `OVRSpatialAnchor` to it and persist it.
+- An empty `RobotWorldFrame`. Optionally add an `OVRSpatialAnchor` to it and save/reload it yourself. While the anchor is localized, recentering doesn't invalidate the registration (see above).
 - `QuestStatePublisher` on any GameObject. It finds the rig itself.
 - A `TagMapVisualizer`. Wire each registration script's `onRegistered` to `TagMapVisualizer.Refresh`.
 - Pick at least one way to register:
@@ -91,7 +96,7 @@ The passthrough reply lists every tag as `tag <id>: n=<frames>, spread <mm>, res
 
 The passthrough accuracy is limited by the 1280×960 camera (a 10 cm tag at 1 m is ~85 px wide), the headset's own tracking, and the factory camera-to-head calibration.
 
-**Check:** with passthrough on, `TagMapVisualizer`'s orange squares should land on the printed tags. Redo registration if you move `RobotWorldFrame`, or if your spatial anchor didn't restore.
+**Check:** with passthrough on, `TagMapVisualizer`'s orange squares should land on the printed tags. Redo registration after a recenter, if you move `RobotWorldFrame`, if your spatial anchor didn't restore, or whenever the squares are off the tags (for example after an app restart).
 
 ## Verify the camera conventions (once, after the first build)
 
@@ -124,7 +129,7 @@ The passthrough accuracy is limited by the 1280×960 camera (a 10 cm tag at 1 m 
 
 The fields per controller:
 
-- **`tracked`:** from `OVRInput.GetControllerPositionTracked`.
+- **`tracked`:** from `OVRInput.GetControllerPositionTracked`, and false for everything while `RobotWorldFrame.RegistrationStale` is set (after a recenter).
 - **Pose:** the controller anchor.
 - **Analog:** `index_trigger`, `hand_trigger` (grip), and the thumbstick x/y.
 - **Buttons:** `button_primary` (A / X), `button_secondary` (B / Y), `thumbstick_pressed`, and `menu` (left only).
@@ -135,5 +140,6 @@ Inputs are read per controller (`Controller.LTouch` / `RTouch`). With a single c
 
 - **Empty service requests:** ROS 2 serialises an empty message as one dummy byte, but ROS-TCP-Connector's generated empty requests (e.g. `GetTagMapRequest`) serialise as nothing. The endpoint then fails to deserialize them, under both Fast-DDS and Cyclone, and never replies. So `TagMapVisualizer` and the reset call send `RosUtil`'s `EmptyRequest` instead.
 - **Service timeouts:** the endpoint also never replies when a service isn't running. All service calls therefore time out (`serviceTimeoutS`) and say so, instead of locking the buttons.
+- **Topics and services are registered by message name** (`RegisterPublisher(topic, XxxMsg.k_RosMessageName)`), never with the generic `RegisterPublisher<XxxMsg>`. In a player build the generated classes register their names after the first scene's `OnEnable`. A generic call made from `OnEnable` would therefore announce the topic to the endpoint with no type, and it would never work on the headset, even though it works in the Editor.
 - **Not a Store app:** PCA and the scripts here are for a lab app.
 - **Alternative tag source:** MRUK's QR-code trackables (`MRUKTrackable`, experimental: not accepted on the Store, needs the Spatial Data permission) give the OS's own pose of a printed QR code, without streaming images. The robot cameras' `aruco_tag_mapper` maps ArUco tags, not QR codes, so using them would need a QR detector on the ROS side as well.

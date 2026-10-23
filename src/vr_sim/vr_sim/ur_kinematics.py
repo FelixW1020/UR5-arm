@@ -83,6 +83,18 @@ def clamp_to_limits(q):
     return np.clip(np.asarray(q, dtype=float), JOINT_LOWER, JOINT_UPPER)
 
 
+def limit_joint_step(dq, max_step):
+    """dq scaled down as a whole so no joint moves more than max_step.
+
+    Scaling every joint by the same factor keeps the step's direction in joint space, so the
+    joints arrive together and the tool stays close to the commanded path. Clipping each joint
+    on its own would bend that path by centimetres once one joint saturates.
+    """
+    dq = np.asarray(dq, dtype=float)
+    largest = float(np.max(np.abs(dq)))
+    return dq * (max_step / largest) if largest > max_step else dq
+
+
 def rotation_log(R):
     """Rotation vector (axis * angle, angle in [0, pi]) of a rotation matrix.
 

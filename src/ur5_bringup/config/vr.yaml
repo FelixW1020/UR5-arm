@@ -54,6 +54,7 @@ vr_tag_detector:
     dictionary: DICT_4X4_50      # same tags as aruco_tag_mapper above
     marker_length: 0.10          # must equal aruco_tag_mapper's marker_length
     tag_ids: '0,1,2,3,4,5'
+    tag_map_file: ~/.ros/handeye/tag_map.yaml   # ~/register refuses if its marker_length differs
     max_reprojection_error_px: 2.0
     max_distance_m: 2.5
     min_observations: 5

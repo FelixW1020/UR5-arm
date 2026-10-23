@@ -8,6 +8,7 @@ Publishes
 """
 import rclpy
 from geometry_msgs.msg import PoseStamped
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile
 from rclpy.time import Time
@@ -73,8 +74,11 @@ def main():
     node = PoseRelayNode()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except Exception:
+        if rclpy.ok():
+            raise       # a Ctrl-C landing inside a message callback surfaces as another error
     finally:
         node.destroy_node()
         rclpy.try_shutdown()

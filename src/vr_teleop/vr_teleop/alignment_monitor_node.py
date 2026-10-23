@@ -13,18 +13,23 @@ Two uses:
      user would see it while playing.
  (b) Real robot, no game. Hold or clamp the right controller to the tool, freedrive the arm and
      use reference_frame:=quest_right_controller with engaged_topic:='' (always measure). Both
-     frames are the same rigid body, so the angle is the registration's rotation error. Translate
+     frames are the same rigid body, so for horizontal strokes the angle is the registration's
+     heading error. In general it is a lower bound on its rotation error: a vertical stroke reads
+     ~0 for a pure heading error and shows only tilt (e.g. a base that is not level). Translate
      in straight strokes without turning the wrist: with a clamp offset, turning the wrist swings
      the controller on an arc the tool flange doesn't follow.
 
 With engaged_topic set (default /vr_teleop/engaged) it measures only while teleop is engaged and
-starts a new stroke at each grip, so hand motion with the clutch open is ignored.
+starts a new stroke at each grip, so hand motion with the clutch open is ignored. It also starts a
+new stroke when the registration (base_frame <- vr_frame) changes, so a re-registration is not
+measured as motion.
 
 Publishes  ~/direction_error_deg, ~/rotation_error_deg  std_msgs/Float64, one per measurement
            ~/markers  MarkerArray (base_frame): reference / tool motion arrows at the tool + text
 """
 import numpy as np
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile
 from rclpy.time import Time
@@ -35,6 +40,7 @@ from visualization_msgs.msg import MarkerArray
 from ur5_common.ros_conversions import transform_to_matrix
 from vr_teleop import markers
 from vr_teleop.alignment import AlignmentTracker
+from vr_teleop.mapping import REGISTRATION_CHANGE_DEG, REGISTRATION_CHANGE_M, pose_change
 
 ARROW_LENGTH_M = 0.15
 
@@ -46,6 +52,7 @@ class AlignmentMonitorNode(Node):
         self.declare_parameter('base_frame', 'base_link')
         self.declare_parameter('reference_frame', 'quest_right_controller')
         self.declare_parameter('tool_frame', 'tool0')
+        self.declare_parameter('vr_frame', 'vr_world')     # '' = don't watch the registration
         self.declare_parameter('rate_hz', 20.0)
         self.declare_parameter('min_motion_m', 0.03)
         self.declare_parameter('min_rotation_deg', 10.0)
@@ -56,6 +63,8 @@ class AlignmentMonitorNode(Node):
         self._base, self._ref, self._tool = g('base_frame'), g('reference_frame'), g('tool_frame')
         self._tracker = AlignmentTracker(g('min_motion_m'), g('min_rotation_deg'))
         self._engaged = not g('engaged_topic')
+        self._vr = g('vr_frame')
+        self._T_reg = None
 
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
@@ -80,7 +89,23 @@ class AlignmentMonitorNode(Node):
         return transform_to_matrix(self._tf_buffer.lookup_transform(self._base, frame,
                                                                     Time()).transform)
 
+    def _watch_registration(self):
+        """Start a new stroke if base_frame <- vr_frame changed (a re-registration)."""
+        try:
+            T_reg = self._T(self._vr)
+        except TransformException:
+            return              # not registered yet: the reference lookup says so
+        if self._T_reg is not None:
+            d_m, d_deg = pose_change(self._T_reg, T_reg)
+            if d_m > REGISTRATION_CHANGE_M or d_deg > REGISTRATION_CHANGE_DEG:
+                self.get_logger().info(f'Registration changed by {d_m * 1000:.0f} mm / '
+                                       f'{d_deg:.2f} deg: starting a new stroke.')
+                self._tracker.reset_anchor()
+        self._T_reg = T_reg
+
     def _step(self):
+        if self._vr:
+            self._watch_registration()
         if not self._engaged:
             return
         try:
@@ -125,8 +150,11 @@ def main():
     node = AlignmentMonitorNode()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except Exception:
+        if rclpy.ok():
+            raise       # a Ctrl-C landing inside a message callback surfaces as another error
     finally:
         node.destroy_node()
         rclpy.try_shutdown()

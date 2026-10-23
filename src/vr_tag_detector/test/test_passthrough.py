@@ -10,7 +10,7 @@ from ur5_common.transforms import (T_LINK_OPTICAL, invert, make_transform, quat_
                                    rotation_angle)
 from vr_tag_detector.passthrough import (Sighting, add_sightings, decode_gray,
                                          detect_tags_in_vr, draw_debug, intrinsics, summarize,
-                                         to_observations)
+                                         tag_map_mismatch, to_observations)
 
 W, H = 1280, 960                       # Quest 3 passthrough-like image
 K = np.array([[880.0, 0, 640], [0, 880.0, 480], [0, 0, 1]])
@@ -215,3 +215,13 @@ def test_sighting_defaults_to_accepted():
     s = Sighting(1, np.eye(4), np.eye(4), 0.2, 0.5, np.zeros((4, 2)))
     m = TagMap()
     assert add_sightings(m, [s]) == 1 and list(m.estimate(1)) == [1]
+
+
+def test_tag_map_mismatch():
+    same = {'marker_length': 0.10, 'dictionary': 'DICT_4X4_50'}
+    assert tag_map_mismatch(same, 0.10, 'DICT_4X4_50') == ''
+    assert tag_map_mismatch({}, 0.10, 'DICT_4X4_50') == ''           # older map: nothing to check
+    msg = tag_map_mismatch({'marker_length': 0.095, 'dictionary': 'DICT_4X4_50'}, 0.10,
+                           'DICT_4X4_50')
+    assert '0.095' in msg and '0.1' in msg and 'dictionary' not in msg
+    assert 'DICT_5X5_50' in tag_map_mismatch(same, 0.10, 'DICT_5X5_50')

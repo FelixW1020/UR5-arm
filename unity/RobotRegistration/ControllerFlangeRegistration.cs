@@ -11,6 +11,7 @@ using UnityEngine.Events;
 ///
 /// X and Y are Button.One / Button.Two when the LEFT controller is named on its own
 /// (Controller.LTouch); Button.Three / Four only exist on the combined Controller.Touch.
+/// A headset recenter clears the samples taken before it (they are in the old vr_world).
 /// </summary>
 public class ControllerFlangeRegistration : MonoBehaviour
 {
@@ -19,6 +20,7 @@ public class ControllerFlangeRegistration : MonoBehaviour
 
     public string addSampleService = "/vr_registration/add_controller_sample";
     public string solveService = "/vr_registration/solve_controller";
+    public string resetService = "/vr_registration/reset_controller_samples";
     public bool saveOnRos = true;
     public float serviceTimeoutS = 10f;
     public TextMesh status;
@@ -26,19 +28,27 @@ public class ControllerFlangeRegistration : MonoBehaviour
 
     ROSConnection _ros;
     bool _waiting;
+    int _samples;                         // added since the last reset
+    int _generation;                      // RobotWorldFrame.Generation of those samples
 
     void Start()
     {
         _ros = ROSConnection.GetOrCreateInstance();
-        _ros.RegisterRosService<AddControllerSampleRequest, AddControllerSampleResponse>(addSampleService);
-        _ros.RegisterRosService<SolveRegistrationRequest, SolveRegistrationResponse>(solveService);
+        _ros.RegisterRosService(addSampleService, AddControllerSampleRequest.k_RosMessageName,
+                                AddControllerSampleResponse.k_RosMessageName);
+        _ros.RegisterRosService(solveService, SolveRegistrationRequest.k_RosMessageName,
+                                SolveRegistrationResponse.k_RosMessageName);
+        TriggerResult.Register();
+        _ros.RegisterRosService(resetService, TriggerResult.k_RosMessageName, TriggerResult.k_RosMessageName);
         SetStatus("Move the arm, then X = add sample, Y = solve.");
     }
 
     void Update()
     {
         if (_waiting || RobotWorldFrame.Instance == null) return;
-        if (OVRInput.GetDown(OVRInput.Button.One, OVRInput.Controller.LTouch))          // X
+        if (_samples > 0 && RobotWorldFrame.CurrentGeneration != _generation)
+            ResetSamples();
+        else if (OVRInput.GetDown(OVRInput.Button.One, OVRInput.Controller.LTouch))     // X
             AddSample();
         else if (OVRInput.GetDown(OVRInput.Button.Two, OVRInput.Controller.LTouch))     // Y
             Solve();
@@ -52,10 +62,25 @@ public class ControllerFlangeRegistration : MonoBehaviour
             return;
         }
         _waiting = true;
+        int generation = RobotWorldFrame.CurrentGeneration;
         var req = new AddControllerSampleRequest(RobotWorldFrame.Instance.ToRosPose(clampedController));
         var r = await _ros.CallService<AddControllerSampleResponse>(addSampleService, req, serviceTimeoutS);
         _waiting = false;
         SetStatus(r != null ? r.message : $"No reply from {addSampleService}. Is vr.launch.py running?");
+        if (r == null || !r.success) return;
+        if (_samples == 0) _generation = generation;
+        _samples = (int)r.num_samples;
+    }
+
+    async void ResetSamples()
+    {
+        _waiting = true;
+        var r = await _ros.CallService<TriggerResult>(resetService, new EmptyRequest(TriggerResult.k_RosMessageName),
+                                                      serviceTimeoutS);
+        _waiting = false;
+        if (r == null) { SetStatus($"No reply from {resetService}. Is vr.launch.py running?"); return; }
+        _samples = 0;
+        SetStatus("Headset recentered: the samples so far were cleared. Start again with X.");
     }
 
     async void Solve()
@@ -67,7 +92,9 @@ public class ControllerFlangeRegistration : MonoBehaviour
         _waiting = false;
         if (r == null) { SetStatus($"No reply from {solveService}. Is vr.launch.py running?"); return; }
         SetStatus(r.message);
-        if (r.success) onRegistered?.Invoke();
+        if (!r.success) return;
+        RobotWorldFrame.Registered(_generation);
+        onRegistered?.Invoke();
     }
 
     void SetStatus(string s)

@@ -16,8 +16,10 @@ Both run robot_state_publisher (ur_description, name:=ur5), ur5_kinematic_sim (f
 /vr_teleop/target_pose), vr_registration (writes ~/.ros/vr_sim/vr_registration.yaml, never the
 real one), vr_tag_detector, quest_bridge, vr_teleop and vr_alignment_monitor.
 """
+import os
+
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.substitutions import (Command, FindExecutable, LaunchConfiguration,
                                   PathJoinSubstitution)
@@ -39,6 +41,8 @@ def _quest_nodes(context):
     nodes = [
         Node(package='vr_registration', executable='registration_node', name='vr_registration',
              parameters=[config, {'tag_map_file': tag_map}], output='screen'),
+        Node(package='vr_tag_detector', executable='tag_detector', name='vr_tag_detector',
+             parameters=[config, {'tag_map_file': tag_map}], output='screen'),
         Node(package='vr_teleop', executable='alignment_monitor', name='vr_alignment_monitor',
              parameters=[config, {'reference_frame': REFERENCE_FRAME[quest]}], output='screen'),
     ]
@@ -48,6 +52,11 @@ def _quest_nodes(context):
             parameters=[config, {'tag_map_file': tag_map,
                                  'controller_mode': arg('controller_mode')}]))
     else:
+        if not os.path.exists(os.path.expanduser(tag_map)):
+            nodes.append(LogInfo(msg=(
+                f'WARNING: no tag map at {tag_map}, so the headset cannot register. Map the '
+                'tags with the real cameras first (README Step 3), or pass '
+                'tag_map_file:=<yaml with your tags\' poses in base_link>.')))
         nodes.append(Node(
             package='ros_tcp_endpoint', executable='default_server_endpoint',
             name='ros_tcp_endpoint', output='screen',
@@ -85,8 +94,6 @@ def generate_launch_description():
              parameters=[{'robot_description': description}]),
         Node(package='vr_sim', executable='ur5_kinematic_sim', name='ur5_kinematic_sim',
              parameters=[config, {'ur_type': arg('ur_type')}], output='screen'),
-        Node(package='vr_tag_detector', executable='tag_detector', name='vr_tag_detector',
-             parameters=[config], output='screen'),
         Node(package='vr_tracking', executable='quest_bridge', name='quest_bridge',
              parameters=[config], output='screen'),
         Node(package='vr_teleop', executable='teleop', name='vr_teleop',

@@ -52,6 +52,26 @@ def test_registration_heading_error_with_clamp_offset():
     assert m is not None and abs(m.direction_error_deg - 7.0) < 1e-6
 
 
+def test_heading_error_shows_only_in_horizontal_strokes():
+    """Registration off by 5 deg of yaw: horizontal strokes read 5, vertical ones ~0."""
+    E = make_transform(_rot([0, 0, 1], 5.0), [0.0, 0.0, 0.0])
+    X = make_transform(np.eye(3), [0.0, 0.05, 0.12])
+
+    def stroke(direction):
+        tr = AlignmentTracker(min_motion_m=0.03)
+        d = np.asarray(direction, dtype=float) / np.linalg.norm(direction)
+        for k in range(16):
+            T_tool = _T(np.array([0.4, 0.1, 0.3]) + 0.01 * k * d)
+            tr.update(E @ T_tool @ X, T_tool)
+        return tr.direction
+
+    for horizontal in ([1, 0, 0], [0, 1, 0], [1, -1, 0]):
+        assert abs(stroke(horizontal).mean - 5.0) < 0.01
+    assert stroke([0, 0, 1]).max < 0.01
+    elev = stroke([1, 0, 1])          # 45 deg up: about 5 * cos(45 deg)
+    assert abs(elev.mean - 5.0 * np.cos(np.radians(45.0))) < 0.05
+
+
 def test_below_threshold_gives_nothing():
     tr = AlignmentTracker(min_motion_m=0.03, min_rotation_deg=10.0)
     assert tr.update(_T([0, 0, 0]), _T([1, 1, 1])) is None
