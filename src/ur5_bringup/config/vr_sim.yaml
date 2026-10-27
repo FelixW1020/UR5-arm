@@ -1,0 +1,95 @@
+# Parameters for vr_sim.launch.py: the whole VR pipeline against a kinematic UR5 in RViz.
+# The launch file sets controller_mode, ur_type, tag_map_file and the alignment reference frame
+# from its arguments. Doubles must be floats (1.0, not 1).
+
+# Fake Quest 3. Its tags are written to tag_map_file at start-up, standing in for the map the
+# robot cameras would build; vr_world_truth is where the headset's world really is.
+quest_sim:
+  ros__parameters:
+    base_frame: base_link
+    vr_frame: vr_world
+    truth_frame: vr_world_truth
+    vr_in_base_xyz: [1.2, -0.5, -0.76]       # m: the Quest floor origin, off to the side
+    vr_in_base_rpy_deg: [0.0, 0.0, 135.0]
+    tag_ids: [0, 1, 2]
+    tag_xyz: [0.45, 0.30, 0.0, 0.60, -0.15, 0.0, 0.35, -0.35, 0.0]
+    tag_yaw_deg: [0.0, 30.0, -45.0]
+    marker_length: 0.10
+    dictionary: DICT_4X4_50
+    state_rate_hz: 30.0
+    passthrough_rate_hz: 5.0
+    camera_width: 1280
+    camera_height: 960
+    camera_fx: 800.0
+    camera_fy: 800.0
+    camera_noise_m: 0.002          # noise on the REPORTED camera pose, like headset tracking
+    camera_noise_deg: 0.2
+    pose_noise_m: 0.0
+    head_xyz: [0.45, -0.85, 0.65]
+    right_controller_xyz: [0.45, -0.45, 0.25]
+    right_controller_rpy_deg: [0.0, 0.0, 90.0]
+    left_controller_xyz: [0.30, -0.60, 0.20]
+    left_controller_rpy_deg: [0.0, 0.0, 90.0]
+    script_side_m: 0.20
+    script_period_s: 16.0
+    script_start_s: 8.0
+    auto_register_after_s: 4.0     # look at the tags and register once (save: false); 0 = off
+    register_service: /vr_tag_detector/register
+
+ur5_kinematic_sim:
+  ros__parameters:
+    rate_hz: 50.0
+    initial_positions: [0.0, -1.5708, 1.5708, -1.5708, -1.5708, 0.0]
+    target_topic: /vr_teleop/target_pose
+    max_joint_velocity: 1.0
+    base_frame: base_link
+    tool_frame: tool0
+    check_fk: true
+
+# Separate files from the real ones, so the sim never loads or overwrites a real registration.
+vr_registration:
+  ros__parameters:
+    base_frame: base_link
+    vr_frame: vr_world
+    mode: yaw_only
+    tag_rotation_weight: 0.1
+    output_file: ~/.ros/vr_sim/vr_registration.yaml
+    load_on_start: false
+
+vr_tag_detector:
+  ros__parameters:
+    frame_topic: /quest/passthrough
+    vr_frame: vr_world
+    dictionary: DICT_4X4_50
+    marker_length: 0.10
+    tag_ids: ''
+    min_observations: 5
+    use_orientation: true
+    registration_service: /vr_registration/register_tags
+
+quest_bridge:
+  ros__parameters:
+    vr_frame: vr_world
+    output_frame: base_link
+    markers_rate_hz: 10.0
+
+vr_teleop:
+  ros__parameters:
+    base_frame: base_link
+    controller_frame: quest_right_controller
+    tool_frame: tool0
+    joy_topic: /quest/right_controller/joy
+    rate_hz: 50.0
+    scale: 1.0
+    follow_orientation: true
+    workspace_min: [-1.0, -1.0, -0.05]
+    workspace_max: [1.0, 1.0, 1.2]
+
+vr_alignment_monitor:
+  ros__parameters:
+    base_frame: base_link
+    tool_frame: tool0
+    rate_hz: 20.0
+    min_motion_m: 0.03
+    engaged_topic: /vr_teleop/engaged
+    summary_every: 10

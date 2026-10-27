@@ -9,7 +9,7 @@
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>tf2_ros_py</exec_depend>
   <exec_depend>handeye_calibration</exec_depend>
   <exec_depend>ur5_common</exec_depend>
 

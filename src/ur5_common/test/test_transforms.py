@@ -26,3 +26,12 @@ def test_rotation_angle():
     c, s = np.cos(0.7), np.sin(0.7)
     Rz = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
     assert abs(rotation_angle(Rz) - 0.7) < 1e-12
+
+
+def test_link_to_optical():
+    from ur5_common.transforms import T_LINK_OPTICAL
+    # optical z (view) = link x, optical x (image right) = -link y, optical y (image down) = -link z
+    assert np.allclose(T_LINK_OPTICAL[:3, :3] @ [0, 0, 1], [1, 0, 0])
+    assert np.allclose(T_LINK_OPTICAL[:3, :3] @ [1, 0, 0], [0, -1, 0])
+    assert np.allclose(T_LINK_OPTICAL[:3, :3] @ [0, 1, 0], [0, 0, -1])
+    assert np.allclose(matrix_to_quat(T_LINK_OPTICAL), [-0.5, 0.5, -0.5, 0.5])

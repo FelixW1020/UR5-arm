@@ -1,4 +1,5 @@
 # Parameters for the VR registration stack (vr.launch.py).
+# Doubles must be written as floats (1.0, not 1): Humble rejects an int for a double parameter.
 
 aruco_tag_mapper:
   ros__parameters:
@@ -19,9 +20,11 @@ vr_registration:
     effector_frame: tool0
     tag_map_file: ~/.ros/handeye/tag_map.yaml
     mode: yaw_only               # yaw_only (robot base level) | full
+    tag_rotation_weight: 0.1     # m^2: one tag's orientation vs one tag's position; 0 = ignore
     output_file: ~/.ros/handeye/vr_registration.yaml
     load_on_start: true
     warn_rms_m: 0.03
+    warn_rotation_deg: 10.0      # per-tag orientation disagreement that adds a WARNING
 
 vr_pose_relay:
   ros__parameters:
@@ -29,3 +32,62 @@ vr_pose_relay:
     vr_frame: vr_world
     topics: [/object_localization/target_pose]
     robot_pose_rate_hz: 2.0
+
+# Quest headset + controllers -> TF, PoseStamped in base_link, Joy (the integration surface).
+quest_bridge:
+  ros__parameters:
+    state_topic: /quest/state
+    topic_prefix: /quest
+    vr_frame: vr_world
+    output_frame: base_link      # must be fixed relative to vr_world
+    frame_prefix: quest_
+    publish_tf: true
+    restamp: true                # the headset clock is not ROS time
+    stale_timeout_s: 1.0
+    markers_rate_hz: 10.0        # 0 disables /quest_bridge/markers
+
+# Register by looking at tags through the headset (PassthroughTagRegistration in Unity).
+vr_tag_detector:
+  ros__parameters:
+    frame_topic: /quest/passthrough
+    vr_frame: vr_world
+    dictionary: DICT_4X4_50      # same tags as aruco_tag_mapper above
+    marker_length: 0.10          # must equal aruco_tag_mapper's marker_length
+    tag_ids: '0,1,2,3,4,5'
+    tag_map_file: ~/.ros/handeye/tag_map.yaml   # ~/register refuses if its marker_length differs
+    max_reprojection_error_px: 2.0
+    max_distance_m: 2.5
+    min_observations: 5
+    window: 150
+    use_orientation: true        # one tag is enough; false = positions only (>= 2 tags)
+    max_spread_m: 0.03
+    registration_service: /vr_registration/register_tags
+    registration_timeout_s: 10.0
+    debug_image_rate_hz: 2.0
+
+# teleop:=true. vr_teleop only publishes /vr_teleop/target_pose; it never moves the robot.
+vr_teleop:
+  ros__parameters:
+    base_frame: base_link
+    controller_frame: quest_right_controller
+    tool_frame: tool0
+    joy_topic: /quest/right_controller/joy
+    clutch_axis: 3               # hand_trigger (grip)
+    clutch_threshold: 0.5
+    joy_timeout_s: 0.5
+    rate_hz: 50.0
+    scale: 1.0
+    follow_orientation: true
+    workspace_min: [-1.0, -1.0, -0.05]   # m, base_link
+    workspace_max: [1.0, 1.0, 1.2]
+
+vr_alignment_monitor:
+  ros__parameters:
+    base_frame: base_link
+    reference_frame: quest_right_controller
+    tool_frame: tool0
+    rate_hz: 20.0
+    min_motion_m: 0.03
+    min_rotation_deg: 10.0
+    engaged_topic: /vr_teleop/engaged    # '' = always measure (freedrive check)
+    summary_every: 10

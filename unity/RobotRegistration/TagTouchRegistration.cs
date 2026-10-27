@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using RosMessageTypes.Geometry;
 using RosMessageTypes.VrInterfaces;
 using Unity.Robotics.ROSTCPConnector;
 using UnityEngine;
@@ -12,8 +13,10 @@ using UnityEngine.Events;
 ///   B                   : undo the last touch
 ///   A                   : send all touches to /vr_registration/register_tags (and save)
 ///
-/// Other tag sources (e.g. a Passthrough Camera API ArUco detector) can call
-/// AddObservation() and Submit() directly instead of using the controller.
+/// Touches are positions only (has_orientation = false), so at least 2 tags are needed (3+
+/// spread out recommended). Other tag sources can call AddObservation() and Submit() directly;
+/// to register by just looking at the tags, use PassthroughTagRegistration instead.
+/// A headset recenter discards the touches made before it.
 /// </summary>
 public class TagTouchRegistration : MonoBehaviour
 {
@@ -27,23 +30,31 @@ public class TagTouchRegistration : MonoBehaviour
 
     public string serviceName = "/vr_registration/register_tags";
     public bool saveOnRos = true;
+    public float serviceTimeoutS = 10f;
     public TextMesh status;               // optional world-space label
     public UnityEvent onRegistered;       // e.g. TagMapVisualizer.Refresh
 
     readonly List<(int id, Vector3 world)> _touches = new List<(int, Vector3)>();
     ROSConnection _ros;
     bool _waiting;
+    int _generation;                      // RobotWorldFrame.Generation of the touches
 
     void Start()
     {
         _ros = ROSConnection.GetOrCreateInstance();
-        _ros.RegisterRosService<RegisterTagsRequest, RegisterTagsResponse>(serviceName);
+        _ros.RegisterRosService(serviceName, RegisterTagsRequest.k_RosMessageName,
+                                RegisterTagsResponse.k_RosMessageName);
         ShowNext();
     }
 
     void Update()
     {
         if (_waiting) return;
+        if (_touches.Count > 0 && RobotWorldFrame.CurrentGeneration != _generation)
+        {
+            _touches.Clear();     // touched in the old vr_world
+            SetStatus($"Headset recentered: touch the tags again, starting with tag {tagOrder[0]}.");
+        }
         if (OVRInput.GetDown(OVRInput.Button.PrimaryIndexTrigger, OVRInput.Controller.RTouch))
         {
             if (_touches.Count < tagOrder.Length)
@@ -61,27 +72,32 @@ public class TagTouchRegistration : MonoBehaviour
         }
     }
 
-    public void AddObservation(int tagId, Vector3 worldPosition) => _touches.Add((tagId, worldPosition));
+    public void AddObservation(int tagId, Vector3 worldPosition)
+    {
+        if (_touches.Count == 0) _generation = RobotWorldFrame.CurrentGeneration;
+        _touches.Add((tagId, worldPosition));
+    }
 
-    public void Submit()
+    public async void Submit()
     {
         var frame = RobotWorldFrame.Instance;
         if (frame == null) { SetStatus("No RobotWorldFrame in scene."); return; }
         if (_touches.Count < 2) { SetStatus("Touch at least 2 tags (3+ recommended)."); return; }
 
-        var obs = _touches.Select(t => new TagObservationMsg(t.id, frame.ToRosPoint(t.world))).ToArray();
+        // A touch gives the tag centre only: no orientation (identity, ignored by ROS).
+        var obs = _touches.Select(t => new TagObservationMsg(
+            t.id, frame.ToRosPoint(t.world), false, new QuaternionMsg(0, 0, 0, 1))).ToArray();
+        int generation = _generation;
         _waiting = true;
         SetStatus($"Registering with {obs.Length} tags...");
-        _ros.SendServiceMessage<RegisterTagsResponse>(
-            serviceName, new RegisterTagsRequest(obs, saveOnRos), OnResponse);
-    }
-
-    void OnResponse(RegisterTagsResponse r)
-    {
+        var r = await _ros.CallService<RegisterTagsResponse>(
+            serviceName, new RegisterTagsRequest(obs, saveOnRos), serviceTimeoutS);
         _waiting = false;
+        if (r == null) { SetStatus($"No reply from {serviceName}. Is vr.launch.py running?"); return; }
         SetStatus(r.message);
         if (!r.success) return;
         _touches.Clear();
+        RobotWorldFrame.Registered(generation);
         onRegistered?.Invoke();
     }
 

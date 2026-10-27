@@ -20,12 +20,16 @@ public class TagMapVisualizer : MonoBehaviour
     void Start()
     {
         _ros = ROSConnection.GetOrCreateInstance();
-        _ros.RegisterRosService<GetTagMapRequest, GetTagMapResponse>(serviceName);
+        _ros.RegisterRosService(serviceName, GetTagMapRequest.k_RosMessageName,
+                                GetTagMapResponse.k_RosMessageName);
         Refresh();
     }
 
+    // EmptyRequest, not GetTagMapRequest: ROS-TCP-Connector serialises empty generated requests
+    // in a form ROS 2 can't read, so the call would never be answered (see RosUtil.cs).
     public void Refresh() =>
-        _ros.SendServiceMessage<GetTagMapResponse>(serviceName, new GetTagMapRequest(), OnTagMap);
+        _ros.SendServiceMessage<GetTagMapResponse>(serviceName,
+            new EmptyRequest(GetTagMapRequest.k_RosMessageName), OnTagMap);
 
     void OnTagMap(GetTagMapResponse r)
     {
