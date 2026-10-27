@@ -8,6 +8,9 @@ vr_pose_relay, quest_bridge (headset + controllers -> TF / poses in base_link / 
 vr_tag_detector (register by looking at a tag), and (tcp_endpoint:=true) the ROS-TCP-Endpoint
 the Quest app connects to on port 10000.
 
+launch_cameras:=false skips the cameras and their calibrated TFs (e.g. with a hand-measured tag
+map, or once the tags are mapped).
+
 teleop:=true adds vr_teleop (grip = clutch -> /vr_teleop/target_pose) and vr_alignment_monitor.
 vr_teleop only publishes a target; nothing here commands the robot.
 """
@@ -49,9 +52,10 @@ def generate_launch_description():
             launch_arguments={'wrist_cam_serial': arg('wrist_cam_serial'),
                               'table_cam_serial': arg('table_cam_serial')}.items(),
             condition=IfCondition(arg('launch_cameras'))),
-        IncludeLaunchDescription(
+        IncludeLaunchDescription(       # needs the hand-eye calibrations, so only with cameras
             PythonLaunchDescriptionSource(
-                PathJoinSubstitution([bringup, 'launch', 'calibrated_tf.launch.py']))),
+                PathJoinSubstitution([bringup, 'launch', 'calibrated_tf.launch.py'])),
+            condition=IfCondition(arg('launch_cameras'))),
 
         Node(package='aruco_tag_mapper', executable='tag_mapper', name='aruco_tag_mapper',
              parameters=[config], output='screen'),

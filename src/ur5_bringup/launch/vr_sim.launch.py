@@ -14,7 +14,8 @@ quest:=real  the Quest app connects through ros_tcp_endpoint (tcp_port) and regi
 
 Both run robot_state_publisher (ur_description, name:=ur5), ur5_kinematic_sim (follows
 /vr_teleop/target_pose), vr_registration (writes ~/.ros/vr_sim/vr_registration.yaml, never the
-real one), vr_tag_detector, quest_bridge, vr_teleop and vr_alignment_monitor.
+real one), vr_tag_detector, quest_bridge, vr_teleop, vr_alignment_monitor and vr_pose_relay
+(/vr/robot_base_pose, so a Unity game can place the simulated robot).
 """
 import os
 
@@ -55,7 +56,8 @@ def _quest_nodes(context):
         if not os.path.exists(os.path.expanduser(tag_map)):
             nodes.append(LogInfo(msg=(
                 f'WARNING: no tag map at {tag_map}, so the headset cannot register. Map the '
-                'tags with the real cameras first (README Step 3), or pass '
+                'tags with the real cameras (README Step 2), measure one by hand (README "No '
+                'robot cameras? Measure the tag by hand"), or pass '
                 'tag_map_file:=<yaml with your tags\' poses in base_link>.')))
         nodes.append(Node(
             package='ros_tcp_endpoint', executable='default_server_endpoint',
@@ -98,6 +100,8 @@ def generate_launch_description():
              parameters=[config], output='screen'),
         Node(package='vr_teleop', executable='teleop', name='vr_teleop',
              parameters=[config], output='screen'),
+        Node(package='vr_registration', executable='pose_relay', name='vr_pose_relay',
+             output='screen'),
         OpaqueFunction(function=_quest_nodes),
         Node(package='rviz2', executable='rviz2', name='rviz2',
              arguments=['-d', PathJoinSubstitution([bringup, 'rviz', 'vr_sim.rviz'])],

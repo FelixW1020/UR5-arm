@@ -1,12 +1,16 @@
 using RosMessageTypes.Geometry;
 using Unity.Robotics.ROSTCPConnector.ROSGeometry;
 using UnityEngine;
+using UnityEngine.Events;
 
 /// <summary>
 /// Defines vr_world, the frame every pose exchanged with ROS is expressed in.
 ///
 /// Put this on an empty GameObject placed once in the room, and never move it after
 /// registering (if you do, register again).
+///
+/// Game code: IsRegistered says whether the robot registration holds right now;
+/// onRegistered / onRegistrationLost fire when that changes (start or pause the game there).
 ///
 /// Recentering the headset (long-press the Meta button) moves Unity's whole world in the
 /// room, this object included, unless it carries a localized OVRSpatialAnchor. Then
@@ -37,6 +41,19 @@ public class RobotWorldFrame : MonoBehaviour
     /// touches, samples) collected under an older value are in the old vr_world: drop them.
     /// </summary>
     public int Generation { get; private set; }
+
+    /// <summary>
+    /// True once a registration succeeded in this app session and no recenter has moved
+    /// vr_world since. A registration saved on the robot PC from an earlier session doesn't
+    /// count: the headset's world can differ between sessions, so register at every start.
+    /// </summary>
+    public bool IsRegistered { get; private set; }
+
+    [Tooltip("Fires after every successful registration (e.g. hide the calibration UI, start the game).")]
+    public UnityEvent onRegistered = new UnityEvent();
+
+    [Tooltip("Fires when a recenter breaks the registration (e.g. pause, show the calibration UI again).")]
+    public UnityEvent onRegistrationLost = new UnityEvent();
 
     int _recenterCount;
 
@@ -77,6 +94,9 @@ public class RobotWorldFrame : MonoBehaviour
                              "registration no longer holds. Poses are sent as untracked until you register again.");
         RegistrationStale = true;
         Generation++;
+        if (!IsRegistered) return;
+        IsRegistered = false;
+        onRegistrationLost.Invoke();
     }
 
     /// <summary>
@@ -85,7 +105,10 @@ public class RobotWorldFrame : MonoBehaviour
     /// </summary>
     public void MarkRegistered(int generation)
     {
-        if (generation == Generation) RegistrationStale = false;
+        if (generation != Generation) return;      // recentered since: the new result is wrong too
+        RegistrationStale = false;
+        IsRegistered = true;
+        onRegistered.Invoke();
     }
 
     /// <summary>Generation of RobotWorldFrame.Instance (0 if there is none).</summary>

@@ -15,6 +15,8 @@ using UnityEngine.Events;
 ///   B                      : clear the sightings and stream again
 ///
 /// A and B are also TagTouchRegistration's buttons: enable only one registration script at a time.
+/// In a game, untick useControllerButtons to keep A/B for gameplay and call Register() and
+/// ResetSightings() from your own UI instead.
 /// After a headset recenter the old sightings are cleared automatically: look at the tags again.
 /// </summary>
 public class PassthroughTagRegistration : MonoBehaviour
@@ -29,6 +31,8 @@ public class PassthroughTagRegistration : MonoBehaviour
     [Tooltip("Stop the camera once registered (B starts it again).")]
     public bool stopStreamingWhenRegistered = true;
 
+    [Tooltip("Off: A/B do nothing here; your own UI calls Register() and ResetSightings().")]
+    public bool useControllerButtons = true;
     public OVRInput.Controller controller = OVRInput.Controller.RTouch;
     public OVRInput.Button registerButton = OVRInput.Button.One;    // A on RTouch
     public OVRInput.Button resetButton = OVRInput.Button.Two;       // B on RTouch
@@ -37,6 +41,12 @@ public class PassthroughTagRegistration : MonoBehaviour
 
     public TextMesh status;               // optional world-space label
     public UnityEvent onRegistered;       // e.g. TagMapVisualizer.Refresh
+
+    /// <summary>True while a register or reset call is waiting for ROS (Register() is ignored).</summary>
+    public bool IsBusy => _busy;
+
+    /// <summary>What the status label shows: camera state, instructions, last reply.</summary>
+    public string StatusText { get; private set; } = "";
 
     ROSConnection _ros;
     bool _busy;
@@ -80,8 +90,8 @@ public class PassthroughTagRegistration : MonoBehaviour
         {
             // Sightings from before a recenter are in the old vr_world: start over.
             if (RobotWorldFrame.CurrentGeneration != _generation) ResetSightings();
-            else if (OVRInput.GetDown(registerButton, controller)) Register();
-            else if (OVRInput.GetDown(resetButton, controller)) ResetSightings();
+            else if (useControllerButtons && OVRInput.GetDown(registerButton, controller)) Register();
+            else if (useControllerButtons && OVRInput.GetDown(resetButton, controller)) ResetSightings();
         }
         if (Time.unscaledTime >= _nextStatus) ShowStatus();
     }
@@ -94,6 +104,7 @@ public class PassthroughTagRegistration : MonoBehaviour
 
     public async void Register()
     {
+        if (_busy) return;
         EnsureRos();
         int generation = _generation;
         _busy = true;
@@ -145,12 +156,13 @@ public class PassthroughTagRegistration : MonoBehaviour
         _nextStatus = Time.unscaledTime + 0.25f;
         bool streaming = streamer != null && streamer.isActiveAndEnabled;
         string camera = streaming ? streamer.Status : "Camera off.";
-        string help = streaming
-            ? "Look at the tag(s) from 0.4-1.2 m, hold still ~2 s each. A = register, B = start over."
-            : "A = register again, B = start over.";
+        string keys = useControllerButtons ? " A = register, B = start over." : "";
+        string help = streaming ? "Look at the tag(s) from 0.4-1.2 m, hold still ~2 s each." + keys
+                                : keys.TrimStart();
         string text = $"{camera}\n{help}" + (_reply.Length > 0 ? $"\n{_reply}" : "");
         if (RobotWorldFrame.Instance != null && RobotWorldFrame.Instance.RegistrationStale)
             text = "Headset recentered: the robot registration no longer holds. Register again.\n" + text;
+        StatusText = text;
         if (status != null) status.text = text;
     }
 }

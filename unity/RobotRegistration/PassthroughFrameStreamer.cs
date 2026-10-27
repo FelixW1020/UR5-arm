@@ -71,6 +71,7 @@ public class PassthroughFrameStreamer : MonoBehaviour
             _ros.RegisterPublisher(topic, PassthroughFrameMsg.k_RosMessageName);
         }
         _hasPose = _moving = false;
+        if (cameraSource == null) cameraSource = GetComponent<PassthroughCameraSource>();   // before Awake
         if (cameraSource != null) cameraSource.SetStreaming(true);
         Status = "Starting...";
     }

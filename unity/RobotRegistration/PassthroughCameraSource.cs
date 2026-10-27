@@ -43,7 +43,7 @@ public class PassthroughCameraSource : MonoBehaviour
     [Tooltip("Diagnostic, normally off. Off = the principal point is where Meta's own projection " +
              "puts it (y counted from the image bottom). On = y counted from the top (Android " +
              "Camera2 convention). Only matters if the logged cy is far from the image centre; " +
-             "see unity/README.md 'Verify the camera conventions'.")]
+             "see unity/README.md 'First-build checklist'.")]
     public bool principalPointFromTop;
 
     bool? _supported;
@@ -51,7 +51,10 @@ public class PassthroughCameraSource : MonoBehaviour
     Vector4 _viewport;            // viewport = (ax * x/z + bx, ay * y/z + by); (ax, bx, ay, by)
     Vector2Int _viewportResolution;
 
-    void Awake()
+    void Awake() => FindParts();
+
+    // Also called from SetStreaming: a sibling's OnEnable can run before this Awake.
+    void FindParts()
     {
         if (cameraAccess == null) cameraAccess = GetComponent<PassthroughCameraAccess>();
         if (cameraRig == null) cameraRig = FindAnyObjectByType<OVRCameraRig>();
@@ -73,6 +76,7 @@ public class PassthroughCameraSource : MonoBehaviour
 
     public void SetStreaming(bool on)
     {
+        FindParts();
         if (cameraAccess == null || !Supported) return;
         _viewportResolution = default;
         if (on)

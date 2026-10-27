@@ -163,7 +163,8 @@ class TagDetectorNode(Node):
                                        self.get_parameter('dictionary').value)
         return (f'The tag map {path} was made with other tags: {mismatch}. Set marker_length '
                 'and dictionary in BOTH the aruco_tag_mapper and vr_tag_detector sections of '
-                'config/vr.yaml (measure the printed black square).') if mismatch else ''
+                'config/vr.yaml (in the simulation: vr_tag_detector in config/vr_sim.yaml), and '
+                'in a hand-written tag map (measure the printed black square).') if mismatch else ''
 
     # ------------------------------------------------------------------ services
     def _register(self, request, response):
