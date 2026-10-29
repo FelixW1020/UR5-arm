@@ -131,6 +131,7 @@ Other console keys: `u` undo, `r` reset, `c` compute without saving, `?` status,
 Do this once, and again whenever a tag moves.
 
 1. Print tags: `ros2 run aruco_tag_mapper generate_tags --ids 0 1 2 3 4 5 --out-dir tags/`. Measure the printed black square and set `marker_length` in **both** the `aruco_tag_mapper` and `vr_tag_detector` sections of `src/ur5_bringup/config/vr.yaml`. If the two don't match, the headset refuses to register and tells you why.
+   - **Already have AprilTag 36h11 tags** (for example, a board in the lab)? Set `dictionary: DICT_APRILTAG_36h11` in both sections instead of printing new tags. Before measuring a tag by hand, check its axes in `/vr_tag_detector/debug_image`: OpenCV may not put a tag's y axis toward the edge you think of as its top.
 2. Tape them flat around the table, spread out, where the cameras and the headset can see them.
 3. Launch the robot, cameras and Quest connection:
    ```bash

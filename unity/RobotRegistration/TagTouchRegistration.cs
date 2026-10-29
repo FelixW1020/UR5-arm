@@ -32,7 +32,7 @@ public class TagTouchRegistration : MonoBehaviour
     public bool saveOnRos = true;
     public float serviceTimeoutS = 10f;
     public TextMesh status;               // optional world-space label
-    public UnityEvent onRegistered;       // e.g. TagMapVisualizer.Refresh
+    public UnityEvent onRegistered = new UnityEvent();     // e.g. TagMapVisualizer.Refresh
 
     readonly List<(int id, Vector3 world)> _touches = new List<(int, Vector3)>();
     ROSConnection _ros;

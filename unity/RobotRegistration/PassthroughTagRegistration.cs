@@ -40,7 +40,7 @@ public class PassthroughTagRegistration : MonoBehaviour
     public float serviceTimeoutS = 20f;
 
     public TextMesh status;               // optional world-space label
-    public UnityEvent onRegistered;       // e.g. TagMapVisualizer.Refresh
+    public UnityEvent onRegistered = new UnityEvent();     // e.g. TagMapVisualizer.Refresh
 
     /// <summary>True while a register or reset call is waiting for ROS (Register() is ignored).</summary>
     public bool IsBusy => _busy;

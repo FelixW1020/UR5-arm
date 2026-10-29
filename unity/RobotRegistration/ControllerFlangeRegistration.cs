@@ -24,7 +24,7 @@ public class ControllerFlangeRegistration : MonoBehaviour
     public bool saveOnRos = true;
     public float serviceTimeoutS = 10f;
     public TextMesh status;
-    public UnityEvent onRegistered;
+    public UnityEvent onRegistered = new UnityEvent();
 
     ROSConnection _ros;
     bool _waiting;
