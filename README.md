@@ -13,6 +13,7 @@ Everything also runs in **simulation in RViz**, with no robot or headset. That's
 | You want to… | Go to |
 |---|---|
 | See it working in 5 minutes, no hardware needed | [Install](#install-ubuntu-2204--ros-2-humble), then [Try it in simulation](#try-it-in-simulation) |
+| Build a bare Quest app to test the headset calibration, no robot needed | [Headset calibration test app](docs/headset-test.md) |
 | Set up the real robot, cameras and headset | [Set up the real system](#set-up-the-real-system) |
 | Use the controllers in your robot code | [Use the headset in robot code](#use-the-headset-in-robot-code) |
 | Build the Unity game | [Building the game](#building-the-game) and the [Unity developer guide](unity/README.md) |
