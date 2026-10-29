@@ -17,19 +17,25 @@ public class TagMapVisualizer : MonoBehaviour
     readonly List<GameObject> _tags = new List<GameObject>();
     ROSConnection _ros;
 
-    void Start()
+    void Start() => Refresh();
+
+    // onRegistered can call Refresh before Start (e.g. this GameObject starts inactive).
+    void EnsureRos()
     {
+        if (_ros != null) return;
         _ros = ROSConnection.GetOrCreateInstance();
         _ros.RegisterRosService(serviceName, GetTagMapRequest.k_RosMessageName,
                                 GetTagMapResponse.k_RosMessageName);
-        Refresh();
     }
 
     // EmptyRequest, not GetTagMapRequest: ROS-TCP-Connector serialises empty generated requests
     // in a form ROS 2 can't read, so the call would never be answered (see RosUtil.cs).
-    public void Refresh() =>
+    public void Refresh()
+    {
+        EnsureRos();
         _ros.SendServiceMessage<GetTagMapResponse>(serviceName,
             new EmptyRequest(GetTagMapRequest.k_RosMessageName), OnTagMap);
+    }
 
     void OnTagMap(GetTagMapResponse r)
     {

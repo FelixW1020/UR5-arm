@@ -14,11 +14,11 @@ using UnityEngine.Events;
 ///
 /// Recentering the headset (long-press the Meta button) moves Unity's whole world in the
 /// room, this object included, unless it carries a localized OVRSpatialAnchor. Then
-/// vr_world is somewhere else and the robot registration is wrong. This script notices
-/// the recenter and sets RegistrationStale: QuestStatePublisher then reports everything
-/// untracked, so the robot side stops following, until a registration script succeeds
-/// again. With a Stage tracking origin (recentering off) or an anchor on this object,
-/// the frame stays put.
+/// vr_world is somewhere else and the robot registration is wrong. Once registered in this
+/// session, this script notices the recenter and sets RegistrationStale: QuestStatePublisher
+/// then reports everything untracked, so the robot side stops following, until a
+/// registration script succeeds again. With a Stage tracking origin (recentering off) or an
+/// anchor on this object, the frame stays put.
 ///
 /// Axis convention: ROS-TCP-Connector's FLU (x forward, y left, z up), which matches
 /// ROS, so vr_world is right-handed and z-up like base_link.
@@ -31,8 +31,9 @@ public class RobotWorldFrame : MonoBehaviour
     public static RobotWorldFrame Instance { get; private set; }
 
     /// <summary>
-    /// True after a recenter moved this frame in the room: the robot registration no longer
-    /// holds. Cleared by MarkRegistered(), which the registration scripts call on success.
+    /// True after a recenter moved this frame in the room after a registration in this session:
+    /// the registration no longer holds. Cleared by MarkRegistered(), which the registration
+    /// scripts call on success.
     /// </summary>
     public bool RegistrationStale { get; private set; }
 
@@ -89,12 +90,13 @@ public class RobotWorldFrame : MonoBehaviour
     void Invalidate(string why)
     {
         if (TryGetComponent(out OVRSpatialAnchor anchor) && anchor.Localized) return;   // stays in the room
-        if (!RegistrationStale)
-            Debug.LogWarning($"[RobotWorldFrame] {why}, so vr_world moved in the room and the robot " +
-                             "registration no longer holds. Poses are sent as untracked until you register again.");
-        RegistrationStale = true;
-        Generation++;
+        Generation++;                  // sightings, touches and samples from before the move are wrong
+        // Nothing to lose before the first registration of the session. The runtime also reports an
+        // origin change while the session starts (seen on Quest 3, Horizon OS v207).
         if (!IsRegistered) return;
+        Debug.LogWarning($"[RobotWorldFrame] {why}, so vr_world moved in the room and the robot " +
+                         "registration no longer holds. Poses are sent as untracked until you register again.");
+        RegistrationStale = true;
         IsRegistered = false;
         onRegistrationLost.Invoke();
     }

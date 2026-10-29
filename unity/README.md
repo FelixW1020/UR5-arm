@@ -40,9 +40,11 @@ During calibration the right controller's **A** and **B** buttons are used, unle
 1. **Unity and Meta SDK:**
    - Unity 2022.3 LTS works with MR Utility Kit (MRUK) v81–v201. MRUK v203 and newer need Unity 6 (6000.0.66f2+).
    - Install the **Meta XR Core SDK** and **MRUK v81 or newer** (v78 and older lack the camera API used here).
+   - Install the **OpenXR Plugin** (`com.unity.xr.openxr`), which Meta recommends from SDK v74. In *Project Settings > XR Plug-in Management*, Android tab, tick **OpenXR** and the **Meta XR** feature group, and add the **Oculus Touch Controller Profile** under OpenXR's interaction profiles.
    - Switch the platform to Android and run *Window > Meta > Tools > Project Setup Tool* (fix all; older SDKs have it under *Meta > Tools*).
+   - Tested on a Quest 3 with Unity 6000.0.85f1, Meta XR Core SDK and MRUK 207.0.1, and OpenXR Plugin 1.18.0.
 2. **ROS-TCP-Connector:** in Package Manager, choose *Add package from git URL*:
-   `https://github.com/Unity-Technologies/ROS-TCP-Connector.git?path=/com.unity.robotics.ros-tcp-connector`
+   `https://github.com/Unity-Technologies/ROS-TCP-Connector.git?path=/com.unity.robotics.ros-tcp-connector#v0.7.0`
 3. **Point it at the ROS PC:** *Robotics > ROS Settings*: Protocol **ROS2**, ROS IP = the ROS PC's address on your network, port 10000. Under *Player Settings > Android*, allow internet access.
    - Choose ROS2 **while Android is the active platform**: the setting is saved as the `ROS2` scripting define of the current platform only.
    - Check that *Player Settings > Android > Scripting Define Symbols* contains `ROS2`. Without it nothing deserializes on the ROS PC.
@@ -57,7 +59,7 @@ During calibration the right controller's **A** and **B** buttons are used, unle
 
 | GameObject | Components | Settings |
 |---|---|---|
-| `OVRCameraRig` (you already have it) | OVR Manager, OVR Passthrough Layer | OVR Manager: Tracking Origin Type *Floor Level*. Passthrough Support *Supported*, tick *Enable Passthrough* and *Enable Passthrough Camera Access*. To actually see the room: an `OVRPassthroughLayer` with Placement *Underlay*, and the `CenterEyeAnchor` camera's background set to a solid colour with alpha 0. Meta's *Passthrough* building block (*Window > Meta > Tools > Building Blocks*) does both |
+| `OVRCameraRig` (you already have it) | OVR Manager, OVR Passthrough Layer | OVR Manager: Tracking Origin Type *Floor Level*. Passthrough Support *Supported*, tick *Enable Passthrough* and *Enable Passthrough Camera Access* (a project-wide setting, greyed out until Passthrough Support is set). To actually see the room: an `OVRPassthroughLayer` (always an underlay in SDK v207; older SDKs: Placement *Underlay*), and the `CenterEyeAnchor` camera's background set to a solid colour with alpha 0. Meta's *Passthrough* building block (*Window > Meta > Tools > Building Blocks*) does both |
 | `RobotWorldFrame` (empty) | `RobotWorldFrame` | Anywhere, but don't move it after calibrating. Only one per game |
 | `QuestState` (empty) | `QuestStatePublisher` | It finds the rig by itself |
 | `Calibration` | `PassthroughCameraAccess` (from MRUK), `PassthroughCameraSource`, `PassthroughFrameStreamer`, `PassthroughTagRegistration` | `PassthroughCameraAccess`: Camera Position *Left*, Requested Resolution 1280×960, **component unticked**. `PassthroughFrameStreamer`: **unticked**. Optional: a `TextMesh` child as the `status` label |
@@ -201,10 +203,7 @@ Other things you can place the same way:
 
 ### Recentering
 
-Holding the Meta button (or choosing *Reset View*) shifts Unity's whole world in the room, `RobotWorldFrame` included, so the calibration no longer holds. `RobotWorldFrame` notices the recenter, sets `RegistrationStale`, makes `IsRegistered` false and fires `onRegistrationLost`. Until the next successful calibration:
-
-- `QuestStatePublisher` sends everything as untracked, so the robot side doesn't follow wrong poses;
-- the registration scripts drop the sightings, touches or samples collected before the recenter, and say so in their status.
+Holding the Meta button (or choosing *Reset View*) shifts Unity's whole world in the room, `RobotWorldFrame` included, so the calibration no longer holds. `RobotWorldFrame` notices the recenter, and the registration scripts drop the sightings, touches or samples collected before it. If the headset was already calibrated in this session, `RobotWorldFrame` also sets `RegistrationStale`, makes `IsRegistered` false and fires `onRegistrationLost`. Until the next successful calibration, `QuestStatePublisher` then sends everything as untracked, so the robot side doesn't follow wrong poses.
 
 Two things keep `vr_world` fixed through a recenter: the *Stage* tracking origin (recentering off, needs a boundary), or a localized `OVRSpatialAnchor` on `RobotWorldFrame` that you save and reload yourself.
 
@@ -212,7 +211,7 @@ Two things keep `vr_world` fixed through a recenter: the *Stage* tracking origin
 
 - **Requirements:** Quest 3 or 3S on **Horizon OS v74+** (v83+ adds 1280×1280), with passthrough enabled.
 - **Testing from the Editor over Link:** MRUK v207 needs Meta Horizon Link v85+ and a headset on Horizon OS v85+.
-- **Manifest permission:** ticking *Enable Passthrough Camera Access* on the OVR Manager adds `horizonos.permission.HEADSET_CAMERA` to the manifest. Check it with *Window > Meta > Tools > Android Manifest Tool*.
+- **Manifest permission:** ticking *Enable Passthrough Camera Access* on the OVR Manager adds `horizonos.permission.HEADSET_CAMERA` to the manifest when the app is built. Check the built app: `aapt dump permissions <your>.apk` (`aapt` is in the Android SDK's `build-tools`).
 - **Runtime permission:** `PassthroughCameraSource` asks for it the first time the camera starts (`requestPermission`). Meta says to request permissions from one place only: if you tick OVR Manager's *Permission Requests On Startup > Passthrough Camera Access* instead, untick `requestPermission`. If the player denies it, the status says so; allow it again in the headset's app permission settings.
 - **Keep the `PassthroughCameraAccess` component unticked in the scene.** `PassthroughFrameStreamer` switches the camera on only while calibrating, and off again afterwards (`stopCameraWhenIdle`).
 - **If an SDK update breaks the camera code,** the fix belongs in `PassthroughCameraSource.cs` only.
