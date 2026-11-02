@@ -58,6 +58,8 @@ Each ROS package does one job and talks to the others only through topics, servi
 
 ## Install (Ubuntu 22.04 + ROS 2 Humble)
 
+No Ubuntu 22.04 (macOS, Windows)? Run the headset side in [Docker](docker/README.md) instead.
+
 You need Ubuntu 22.04 with [ROS 2 Humble](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html) installed. Then:
 
 ```bash
