@@ -22,7 +22,7 @@ The full reference is the [Unity developer guide](../unity/README.md). This page
    | Camera rig | Building Blocks **Camera Rig** and **Passthrough** (*Meta > Tools > Building Blocks*; on SDK v207+ *Window > Meta > Tools > Building Blocks*) | On the rig's OVR Manager, tick *Enable Passthrough Camera Access*. The blocks set Floor Level and passthrough for you |
    | `RobotWorldFrame` | Empty + `RobotWorldFrame` | — |
    | `Calibration` | Empty + `PassthroughCameraAccess` (from MRUK), `PassthroughCameraSource`, `PassthroughFrameStreamer`, `PassthroughTagRegistration` | `PassthroughCameraAccess`: keep the defaults (Left, 1280×960), **component unticked**. `PassthroughFrameStreamer`: **component unticked** |
-   | `TagMap` | Empty + `TagMapVisualizer` | Tag Size = the printed black square (0.10). On `PassthroughTagRegistration`'s *On Registered*, add `TagMap` → `TagMapVisualizer.Refresh` |
+   | `TagMap` | Empty + `TagMapVisualizer` | Tag Size = the printed black square (0.10). Material = a see-through material (e.g. `Sprites/Default` shader, alpha about 0.45); without one the squares draw magenta. On `PassthroughTagRegistration`'s *On Registered*, add `TagMap` → `TagMapVisualizer.Refresh` |
    | Status label (recommended) | Right-click `CenterEyeAnchor` > *3D Object > Legacy > TextMesh* | Position z 0.8, Scale 0.01, Anchor *Middle center*. Drag it into `PassthroughTagRegistration`'s *Status*. Some messages ("Hold still", camera permission) only show here |
 
 3. Save the scene. In *File > Build Profiles* (Android), click *Add Open Scenes* under *Scene List* and untick every other scene. Plug in the Quest, accept *Allow USB debugging* in the headset, pick it as *Run Device*, and click *Build And Run*.

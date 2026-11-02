@@ -8,12 +8,16 @@ This repo makes a **UR5 robot arm**, two **Intel RealSense cameras** and a **Met
 
 Everything also runs in **simulation in RViz**, with no robot or headset. That's the best place to start.
 
+**Tested on a real Quest 3** with a simulated UR5: headset calibration to 4.8 mm, and the headset and both controllers streamed into ROS at 30 Hz. See the [results with photos and plots](docs/headset-test-results/README.md). The real UR5 is next.
+
 ## Start here
 
 | You want to… | Go to |
 |---|---|
 | See it working in 5 minutes, no hardware needed | [Install](#install-ubuntu-2204--ros-2-humble), then [Try it in simulation](#try-it-in-simulation) |
 | Build a bare Quest app to test the headset calibration, no robot needed | [Headset calibration test app](docs/headset-test.md) |
+| See it working on a real Quest 3 (photos, plots, numbers) | [Headset test results](docs/headset-test-results/README.md) |
+| Run the headset side on macOS or Windows | [Docker](docker/README.md) |
 | Set up the real robot, cameras and headset | [Set up the real system](#set-up-the-real-system) |
 | Use the controllers in your robot code | [Use the headset in robot code](#use-the-headset-in-robot-code) |
 | Build the Unity game | [Building the game](#building-the-game) and the [Unity developer guide](unity/README.md) |
@@ -49,12 +53,15 @@ Each ROS package does one job and talks to the others only through topics, servi
 | `src/aruco_tag_mapper` | ② Finds the tags with both cameras and saves `tag_map.yaml` |
 | `src/vr_tag_detector`, `src/vr_registration` | ③ Finds the tags in the Quest's camera images and solves `base_link → vr_world` |
 | `src/vr_tracking` | Streams the headset and controllers into ROS. **This is what your robot code uses** |
+| `src/quest_listener_example` | A small example of robot code that uses those poses: copy it into your own package |
 | `src/vr_teleop` | Hold the grip button to move the arm's target with the controller; checks the arm moves the right way |
 | `src/vr_sim` | A fake Quest and a simulated UR5, for testing everything in RViz |
 | `src/yolo_detector`, `src/object_localization` | Finds a cup (or any COCO object) with YOLO + depth |
 | `src/ur5_bringup` | Launch files, configs and RViz layouts |
 | `src/ur5_common`, `src/*_interfaces` | Shared transform math, custom messages and services |
 | `unity/RobotRegistration` | C# scripts for the Quest app ([Unity developer guide](unity/README.md)) |
+| `docker/` | The headset side in a container, for machines without Ubuntu 22.04 |
+| `docs/` | The [headset test](docs/headset-test.md) and its [results](docs/headset-test-results/README.md) |
 
 ## Install (Ubuntu 22.04 + ROS 2 Humble)
 
@@ -224,6 +231,8 @@ Once the tags are mapped, you don't need the cameras any more. If your own launc
 ```bash
 ros2 launch ur5_bringup vr.launch.py launch_robot:=false launch_cameras:=false rviz:=false
 ```
+
+**Example package:** `ros2 run quest_listener_example listener` logs the head and both controllers once a second, plus the right controller's distance to the robot's `tool0`. Its code ([listener_node.py](src/quest_listener_example/quest_listener_example/listener_node.py)) uses only standard messages, so you can copy it into your own package.
 
 When a controller loses tracking, its `/quest/*/pose` topic simply stops. TF instead keeps returning the **last** pose, so always check how old a TF pose is. A minimal node that prints the right controller's position:
 
