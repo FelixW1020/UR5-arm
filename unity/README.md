@@ -63,7 +63,7 @@ During calibration the right controller's **A** and **B** buttons are used, unle
 | `RobotWorldFrame` (empty) | `RobotWorldFrame` | Anywhere, but don't move it after calibrating. Only one per game |
 | `QuestState` (empty) | `QuestStatePublisher` | It finds the rig by itself |
 | `Calibration` | `PassthroughCameraAccess` (from MRUK), `PassthroughCameraSource`, `PassthroughFrameStreamer`, `PassthroughTagRegistration` | `PassthroughCameraAccess`: Camera Position *Left*, Requested Resolution 1280×960, **component unticked**. `PassthroughFrameStreamer`: **unticked**. Optional: a `TextMesh` child as the `status` label |
-| `TagMap` (empty) | `TagMapVisualizer` | On `RobotWorldFrame`, add `TagMapVisualizer.Refresh` to its *On Registered* event |
+| `TagMap` (empty) | `TagMapVisualizer` | On `RobotWorldFrame`, add `TagMapVisualizer.Refresh` to its *On Registered* event. Set *Tag Size* to your printed square. Assign a *Material*, for example a see-through one using the `Sprites/Default` shader: without one, a build can strip the default material's shader, and the squares draw magenta and hard to see |
 | `RobotBase` (empty) | `RosPoseFollower` | Topic `/vr/robot_base_pose`. Tick `waitForRegistration`: otherwise it first jumps to where the ROS PC's last saved calibration puts the robot, which may be off in a new session |
 
 The two unticked components are switched on by the scripts only while the camera is needed.

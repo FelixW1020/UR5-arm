@@ -1,0 +1,27 @@
+$ ros2 topic info -v /quest/right_controller/pose
+Type: geometry_msgs/msg/PoseStamped
+Publisher count: 1
+Node name: quest_bridge
+Node namespace: /
+Topic type: geometry_msgs/msg/PoseStamped
+Endpoint type: PUBLISHER
+Subscription count: 1
+Node name: quest_listener_example
+Node namespace: /
+Topic type: geometry_msgs/msg/PoseStamped
+Endpoint type: SUBSCRIPTION
+
+$ ros2 node info /quest_listener_example (subscriptions)
+  Subscribers:
+    /quest/head/pose: geometry_msgs/msg/PoseStamped
+    /quest/left_controller/pose: geometry_msgs/msg/PoseStamped
+    /quest/right_controller/joy: sensor_msgs/msg/Joy
+    /quest/right_controller/pose: geometry_msgs/msg/PoseStamped
+    /tf: tf2_msgs/msg/TFMessage
+    /tf_static: tf2_msgs/msg/TFMessage
+
+$ ros2 run tf2_tools view_frames   (tf_tree.pdf / tf_tree.png)
+world -> base_link -> base_link_inertia -> shoulder_link -> ... -> wrist_3_link -> flange -> tool0   (robot, robot_state_publisher)
+base_link -> vr_world                                     (the headset calibration, vr_registration)
+vr_world -> quest_head, quest_left_controller, quest_right_controller   (quest_bridge, 30.2 Hz)
+
