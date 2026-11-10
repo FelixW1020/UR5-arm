@@ -6,6 +6,21 @@ You can **build the game first and add calibration later**. Follow the [five rul
 
 > **Status:** these scripts compile, and the messages they build were tested against the real ROS nodes, but they haven't run on a headset yet. Expect small fixes on the first import, and run the [first-build checklist](#first-build-checklist) once.
 
+## The game prototype (temporary)
+
+[`QuestUR5Game/`](QuestUR5Game) is a snapshot of the gameplay project from [HZ0209/Quest-UR5-Unity](https://github.com/HZ0209/Quest-UR5-Unity): pick up a cube, place it on pads, simulated robot help, and CSV trial logs. Its own [README](QuestUR5Game/README.md) covers opening and running it.
+
+- **It's temporary.** The game is still being developed in that repo, which is the source of truth. Don't edit `QuestUR5Game/` here; make changes in the game repo.
+- **It doesn't talk to the robot yet.** The "robot" in its scenes is a Unity animation. It doesn't use the scripts in `RobotRegistration/` or ROS-TCP-Connector.
+- **It uses its own Unity version** (`6000.4.10f1`, in [`ProjectVersion.txt`](QuestUR5Game/ProjectSettings/ProjectVersion.txt)). Install that version, not the one in the steps below.
+
+To pull the developer's latest changes (run from the repo root):
+
+```bash
+git remote add quest-unity git@github.com:HZ0209/Quest-UR5-Unity.git   # once
+git subtree pull --prefix=unity/QuestUR5Game quest-unity main --squash
+```
+
 ## How it works
 
 - **`RobotWorldFrame`** is an empty GameObject that stands for the headset's world (`vr_world` on the ROS side). Every position sent to or received from ROS is relative to it.
