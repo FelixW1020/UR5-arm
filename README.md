@@ -60,6 +60,7 @@ Each ROS package does one job and talks to the others only through topics, servi
 | `src/ur5_bringup` | Launch files, configs and RViz layouts |
 | `src/ur5_common`, `src/*_interfaces` | Shared transform math, custom messages and services |
 | `unity/RobotRegistration` | C# scripts for the Quest app ([Unity developer guide](unity/README.md)) |
+| `unity/QuestUR5Game` | **Temporary** copy of the game prototype from [HZ0209/Quest-UR5-Unity](https://github.com/HZ0209/Quest-UR5-Unity), still being developed there ([what to know](unity/README.md#the-game-prototype-temporary)) |
 | `docker/` | The headset side in a container, for machines without Ubuntu 22.04 |
 | `docs/` | The [headset test](docs/headset-test.md) and its [results](docs/headset-test-results/README.md) |
 
