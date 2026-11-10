@@ -14,6 +14,14 @@ You can **build the game first and add calibration later**. Follow the [five rul
 - **It doesn't talk to the robot yet.** The "robot" in its scenes is a Unity animation. It doesn't use the scripts in `RobotRegistration/` or ROS-TCP-Connector.
 - **It uses its own Unity version** (`6000.4.10f1`, in [`ProjectVersion.txt`](QuestUR5Game/ProjectSettings/ProjectVersion.txt)). Install that version, not the one in the steps below.
 
+**Before the block can map to a real spot** (checked 2026-11-10 against all seven scenes): every scene uses Floor Level tracking with the camera rig at the origin, so at launch the block's Unity coordinates *are* its tracking-space coordinates (the block starts 1 m above the floor, 0.25 m in front). Three things break that:
+
+1. The `OVRComprehensiveInteractionRig` building block includes Meta's locomotion (snap turn, teleport, slide, step), and its `FirstPersonLocomotor` moves the camera rig. That breaks rule 1 [below](#build-the-game-now-add-calibration-later). Turn locomotion off.
+2. `AllowRecenter` is on, so a long press of the Meta button moves the tracking origin in the room. Use the Stage origin, or register again after a recenter (`RobotWorldFrame` detects it).
+3. Passthrough is off in every scene (`isInsightPassthroughEnabled: 0`), so the game runs as VR, not AR. Calibration needs passthrough.
+
+During the simulated robot transport, the game hides the block and moves a runtime copy (`TransportVisual_Runtime`) instead. Point `TrackingSpacePose.target` at that copy while it exists.
+
 To pull the developer's latest changes (run from the repo root):
 
 ```bash
@@ -204,6 +212,7 @@ Other things you can place the same way:
 | `ControllerFlangeRegistration` | Calibrate with a controller clamped to the robot's flange | calls `/vr_registration/add_controller_sample`, `/vr_registration/solve_controller`, `/vr_registration/reset_controller_samples` |
 | `TagMapVisualizer` | Draws the robot's tag map in VR (a visual check) | calls `/vr_registration/get_tag_map` |
 | `RosPoseFollower` | Moves a GameObject to a `PoseStamped` in `vr_world` (optionally only once calibrated: `waitForRegistration`) | subscribes, e.g. `/vr/robot_base_pose` |
+| `TrackingSpacePose` | Gives any object's pose (e.g. the game's block) in the headset's tracking space, even after locomotion moves the rig. Flags locomotion (`RigMoved`) and recenters (`Recentered`). No ROS needed | — |
 | `RosUtil` | Timestamps, service calls with a timeout, the empty-request fix (see Notes) | — |
 
 ### Other ways to register
