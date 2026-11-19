@@ -16,6 +16,10 @@ Both run robot_state_publisher (ur_description, name:=ur5), ur5_kinematic_sim (f
 /vr_teleop/target_pose), vr_registration (writes ~/.ros/vr_sim/vr_registration.yaml, never the
 real one), vr_tag_detector, quest_bridge, vr_teleop, vr_alignment_monitor and vr_pose_relay
 (/vr/robot_base_pose, so a Unity game can place the simulated robot).
+
+sim_cameras:=true (default) adds stand-in hand-eye results as static TF (tool0 -> wrist_cam_link,
+base_link -> table_cam_link), so the game's camera markers (/vr/frames/...) can be checked
+without cameras. They are made-up poses, not a calibration.
 """
 import os
 
@@ -28,6 +32,13 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
+# Made-up stand-ins for the hand-eye results: x y z (m) roll pitch yaw (rad), parent, child.
+# camera_link x is the viewing direction: the wrist camera looks along tool0's z, the table
+# camera looks back at the robot from 0.9 m in front, tilted 35 deg down.
+SIM_CAMERAS = [
+    ('0.0', '-0.08', '0.02', '0.0', '-1.5708', '0.0', 'tool0', 'wrist_cam_link'),
+    ('0.9', '0.0', '0.6', '0.0', '0.6109', '3.1416', 'base_link', 'table_cam_link'),
+]
 DEFAULT_TAG_MAP = {'sim': '~/.ros/vr_sim/tag_map.yaml', 'real': '~/.ros/handeye/tag_map.yaml'}
 REFERENCE_FRAME = {'sim': 'quest_right_controller_truth', 'real': 'quest_right_controller'}
 
@@ -90,6 +101,13 @@ def generate_launch_description():
         DeclareLaunchArgument('tcp_port', default_value='10000',
                               description='ros_tcp_endpoint port (quest:=real)'),
         DeclareLaunchArgument('rviz', default_value='true'),
+        DeclareLaunchArgument('sim_cameras', default_value='true',
+                              description='publish stand-in wrist_cam_link / table_cam_link TF'),
+        *[Node(package='tf2_ros', executable='static_transform_publisher',
+               name=f'sim_{child}', output='screen', condition=IfCondition(arg('sim_cameras')),
+               arguments=['--x', x, '--y', y, '--z', z, '--roll', r, '--pitch', p, '--yaw', yw,
+                          '--frame-id', parent, '--child-frame-id', child])
+          for x, y, z, r, p, yw, parent, child in SIM_CAMERAS],
 
         Node(package='robot_state_publisher', executable='robot_state_publisher',
              name='robot_state_publisher', output='screen',
