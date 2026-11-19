@@ -20,6 +20,13 @@ public class RosPoseFollower : MonoBehaviour
     Vector3 _targetPos;
     Quaternion _targetRot;
     bool _hasPose;
+    float _lastPoseTime = float.NegativeInfinity;
+
+    /// <summary>True once a pose has been applied (after waitForRegistration, if ticked).</summary>
+    public bool HasPose => _hasPose;
+
+    /// <summary>Unscaled seconds since the last applied pose (infinity before the first).</summary>
+    public float SecondsSinceLastPose => Time.unscaledTime - _lastPoseTime;
 
     void Start()
     {
@@ -38,6 +45,7 @@ public class RosPoseFollower : MonoBehaviour
         _targetRot = frame.FromRosRotation(msg.pose.orientation);
         if (!_hasPose) transform.SetPositionAndRotation(_targetPos, applyRotation ? _targetRot : transform.rotation);
         _hasPose = true;
+        _lastPoseTime = Time.unscaledTime;
     }
 
     void Update()

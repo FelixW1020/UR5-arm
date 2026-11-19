@@ -297,10 +297,12 @@ colcon test && colcon test-result --verbose
 | Frame | Published by |
 |---|---|
 | `base_link` → … → `tool0` | UR driver (in simulation: `robot_state_publisher` + `ur5_kinematic_sim`) |
-| `tool0` → `wrist_cam_link`, `base_link` → `table_cam_link` | `handeye_publisher` |
+| `tool0` → `wrist_cam_link`, `base_link` → `table_cam_link` | `handeye_publisher` (in simulation: stand-in static TF, `sim_cameras:=true`) |
 | `base_link` → `tag_<id>` | `aruco_tag_mapper` |
 | `base_link` → `vr_world` | `vr_registration` (`vr_world` is the Unity `RobotWorldFrame`) |
 | `vr_world` → `quest_head`, `quest_left_controller`, `quest_right_controller` | `quest_bridge` |
 | `base_link` → `vr_world_truth` → `quest_*_truth` | `quest_sim` (simulation only: the ground truth) |
+
+For the game, `vr_pose_relay` re-publishes some of these in `vr_world`: `/vr/robot_base_pose` (`base_link`), and `/vr/frames/<frame>` for each frame in its `frames` list (by default the two cameras).
 
 Want more depth? Every node's file starts with a docstring that explains its parameters and topics.

@@ -32,6 +32,8 @@ vr_pose_relay:
     vr_frame: vr_world
     topics: [/object_localization/target_pose]
     robot_pose_rate_hz: 2.0
+    frames: [wrist_cam_link, table_cam_link]   # -> /vr/frames/<frame>: the calibrated cameras, for the game ([''] = none)
+    frame_rate_hz: 10.0
 
 # Quest headset + controllers -> TF, PoseStamped in base_link, Joy (the integration surface).
 quest_bridge:

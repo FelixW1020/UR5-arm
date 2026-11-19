@@ -190,6 +190,7 @@ public class RobotCoordinatesExample : MonoBehaviour
 Other things you can place the same way:
 
 - **The cup** found by the robot's cameras: another `RosPoseFollower` with topic `/vr/object_localization/target_pose`.
+- **The RealSense cameras**, where the hand-eye calibration puts them: a `RosPoseFollower` with topic `/vr/frames/wrist_cam_link` or `/vr/frames/table_cam_link`. `vr_pose_relay` publishes every TF frame in its `frames` list (in `vr.yaml`) this way, at 10 Hz. A model's lens should point along local +z (`camera_link` x). If one of these markers sits on the real camera, both the hand-eye calibration and the headset calibration are good. `vr_sim.launch.py` publishes stand-in poses for both cameras, so you can test this without them.
 - **A moving robot model:** import the UR5 URDF with Unity's URDF Importer as a child of `RobotBase`, and drive its joints from `/joint_states` (not included here).
 
 ### 6. Testing without the real robot
@@ -211,7 +212,7 @@ Other things you can place the same way:
 | `TagTouchRegistration` | Calibrate by touching tag centres with the controller tip | calls `/vr_registration/register_tags` |
 | `ControllerFlangeRegistration` | Calibrate with a controller clamped to the robot's flange | calls `/vr_registration/add_controller_sample`, `/vr_registration/solve_controller`, `/vr_registration/reset_controller_samples` |
 | `TagMapVisualizer` | Draws the robot's tag map in VR (a visual check) | calls `/vr_registration/get_tag_map` |
-| `RosPoseFollower` | Moves a GameObject to a `PoseStamped` in `vr_world` (optionally only once calibrated: `waitForRegistration`) | subscribes, e.g. `/vr/robot_base_pose` |
+| `RosPoseFollower` | Moves a GameObject to a `PoseStamped` in `vr_world` (optionally only once calibrated: `waitForRegistration`). `HasPose` and `SecondsSinceLastPose` say whether poses are arriving | subscribes, e.g. `/vr/robot_base_pose`, `/vr/frames/<frame>` |
 | `TrackingSpacePose` | Gives any object's pose (e.g. the game's block) in the headset's tracking space, even after locomotion moves the rig. Flags locomotion (`RigMoved`) and recenters (`Recentered`). No ROS needed | — |
 | `RosUtil` | Timestamps, service calls with a timeout, the empty-request fix (see Notes) | — |
 
